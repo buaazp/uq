@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ const (
 	ErrLineNotExisted  string = "Line Not Existed"
 	ErrTopicExisted    string = "Topic Has Existed"
 	ErrLineExisted     string = "Line Has Existed"
+	ErrNotDelivered    string = "Message Not Delivered"
 	ErrKey             string = "Key Illegal"
 	ErrNone            string = "No Message"
 )
@@ -47,10 +49,12 @@ func NewUnitedQueue(storage store.Storage) (*UnitedQueue, error) {
 }
 
 func (u *UnitedQueue) Close() {
+	log.Printf("uq stoping...")
 	err := u.exportQueue()
 	if err != nil {
 		log.Printf("export queue error: %s", err)
 	}
+
 	u.storage.Close()
 }
 
@@ -101,6 +105,7 @@ func (u *UnitedQueue) loadQueue() error {
 					t.q = u
 					u.topics[topicName] = t
 					log.Printf("topic[%s] load succ.", topicName)
+					log.Printf("topic: %v", t)
 				}
 			}
 		}
@@ -114,11 +119,12 @@ func (u *UnitedQueue) loadQueue() error {
 func (u *UnitedQueue) exportQueue() error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	log.Printf("start export queue...")
 
 	topics := make([]string, len(u.topics))
 	i := 0
 	for topicName, t := range u.topics {
-		topicStoreValue, err := t.exportStore()
+		topicStoreValue, err := t.exportTopic()
 		if err != nil {
 			continue
 		}
@@ -237,7 +243,7 @@ func (u *UnitedQueue) Push(name string, data []byte) error {
 	if !ok {
 		return errors.New(ErrTopicNotExisted)
 	}
-	err := t.Push(data)
+	err := t.push(data)
 	if err != nil {
 		return err
 	}
@@ -265,7 +271,35 @@ func (u *UnitedQueue) Pop(name string) ([]byte, error) {
 		return nil, errors.New(ErrTopicNotExisted)
 	}
 
-	return t.Pop(lName)
+	return t.pop(lName)
+}
+
+func (u *UnitedQueue) Confirm(name string) error {
+	parts := strings.Split(name, "/")
+	if len(parts) != 3 {
+		return errors.New(ErrKey)
+	}
+
+	tName := parts[0]
+	lName := parts[1]
+
+	str := strings.Trim(parts[2], " ")
+	if len(str) <= 0 {
+		return errors.New(ErrKey)
+	}
+	i, err := strconv.Atoi(str)
+	if err != nil || i < 0 {
+		return errors.New(ErrKey)
+	}
+	id := uint64(i)
+
+	t, ok := u.topics[tName]
+	if !ok {
+		log.Printf("topic[%s] not existed.", tName)
+		return errors.New(ErrTopicNotExisted)
+	}
+
+	return t.confirm(lName, id)
 }
 
 func (u *UnitedQueue) getData(key string) ([]byte, error) {

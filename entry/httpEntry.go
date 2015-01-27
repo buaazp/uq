@@ -28,6 +28,7 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	router.HandleFunc("/create", h.createHandler).Methods("POST")
 	router.HandleFunc("/pop/{topic}/{line}", h.popHandler).Methods("GET")
 	router.HandleFunc("/push/{topic}", h.pushHandler).Methods("POST")
+	router.HandleFunc("/confirm", h.confirmHandler).Methods("POST")
 
 	addr := fmt.Sprintf("%s:%d", host, port)
 	server := new(http.Server)
@@ -99,6 +100,24 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *HttpEntry) confirmHandler(w http.ResponseWriter, req *http.Request) {
+	limitedr := ioutils.NewLimitedBufferReader(req.Body, h.MaxSize)
+	data, err := ioutil.ReadAll(limitedr)
+	if err != nil {
+		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
+		return
+	}
+
+	name := string(data)
+	err = h.MessageQueue.Confirm(name)
+	if err != nil {
+		log.Printf("confirm error: %s", err)
+		http.Error(w, "500 Bad Request!", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *HttpEntry) ListenAndServe() error {
 	ln, err := net.Listen("tcp", h.Server.Addr)
 	if err != nil {
@@ -112,9 +131,11 @@ func (h *HttpEntry) ListenAndServe() error {
 	h.StopListener = stopListener
 
 	return h.Server.Serve(h.StopListener)
+	// return h.Server.ListenAndServe()
 }
 
 func (h *HttpEntry) Stop() {
+	log.Printf("http entry stoping...")
 	h.MessageQueue.Close()
 	h.StopListener.Stop()
 }

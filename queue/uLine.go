@@ -54,6 +54,7 @@ func (l *line) exportLine() (*lineStore, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	log.Printf("start export line...")
 	inflights := make([]inflightMessage, l.inflight.Len())
 	i := 0
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
@@ -70,24 +71,24 @@ func (l *line) exportLine() (*lineStore, error) {
 	return ls, nil
 }
 
-func (l *line) Pop() ([]byte, error) {
+func (l *line) pop() ([]byte, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	if l.recycle > 0 {
+		log.Printf("inflight len: %d", l.inflight.Len())
 		for m := l.inflight.Front(); m != nil; m = m.Next() {
 			msg := m.Value.(*inflightMessage)
-			log.Printf("finding key[%s/%d] in flights...", l.name, msg.Tid)
+			// log.Printf("finding key[%s/%d] in flights...", l.name, msg.Tid)
 			if time.Now().Before(msg.Exptime) {
-				log.Printf("key[%s/%d] is not expired, continue...", l.name, msg.Tid)
+				// log.Printf("key[%s/%d] is not expired, continue...", l.name, msg.Tid)
 				continue
 			} else {
-				tid := msg.Tid
 				msg.Exptime = time.Now().Add(l.recycle)
-				log.Printf("key[%s/%d] is expired.", l.name, tid)
+				// log.Printf("key[%s/%d] is expired.", l.name, msg.Tid)
 
-				log.Printf("key[%s/%d] poped.", l.name, tid)
-				return l.t.getData(tid)
+				log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, msg.Tid)
+				return l.t.getData(msg.Tid)
 			}
 		}
 	}
@@ -101,7 +102,7 @@ func (l *line) Pop() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("key[%s/%d] poped.", l.name, l.head)
+	log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
 
 	if l.recycle > 0 {
 		msg := new(inflightMessage)
@@ -109,9 +110,38 @@ func (l *line) Pop() ([]byte, error) {
 		msg.Exptime = time.Now().Add(l.recycle)
 
 		l.inflight.PushBack(msg)
-		log.Printf("key[%s/%d] flighted.", l.name, l.head)
+		log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
 	}
 	l.head++
 
 	return data, nil
+}
+
+func (l *line) confirm(id uint64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.recycle == 0 {
+		return nil
+	}
+
+	confirmed := false
+	for m := l.inflight.Front(); m != nil; m = m.Next() {
+		msg := m.Value.(*inflightMessage)
+		if msg.Tid < id {
+			continue
+		} else if msg.Tid == id {
+			l.inflight.Remove(m)
+			confirmed = true
+			break
+		} else {
+			break
+		}
+	}
+
+	if confirmed {
+		log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
+		return nil
+	}
+	return errors.New(ErrNotDelivered)
 }

@@ -31,10 +31,11 @@ func NewTopic(name string) (*topic, error) {
 	return t, nil
 }
 
-func (t *topic) exportStore() (*topicStore, error) {
+func (t *topic) exportTopic() (*topicStore, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	log.Printf("start export topic...")
 	lines := make([]string, len(t.lines))
 	i := 0
 	for _, line := range t.lines {
@@ -69,7 +70,7 @@ func (t *topic) CreateLine(name string, recycle time.Duration) error {
 	return nil
 }
 
-func (t *topic) Push(data []byte) error {
+func (t *topic) push(data []byte) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -82,14 +83,24 @@ func (t *topic) Push(data []byte) error {
 	return nil
 }
 
-func (t *topic) Pop(name string) ([]byte, error) {
+func (t *topic) pop(name string) ([]byte, error) {
 	l, ok := t.lines[name]
 	if !ok {
 		log.Printf("line[%s] not existed.", name)
 		return nil, errors.New(ErrLineNotExisted)
 	}
 
-	return l.Pop()
+	return l.pop()
+}
+
+func (t *topic) confirm(name string, id uint64) error {
+	l, ok := t.lines[name]
+	if !ok {
+		log.Printf("line[%s] not existed.", name)
+		return errors.New(ErrLineNotExisted)
+	}
+
+	return l.confirm(id)
 }
 
 func (t *topic) getData(id uint64) ([]byte, error) {
