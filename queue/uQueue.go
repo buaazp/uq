@@ -243,13 +243,8 @@ func (u *UnitedQueue) Push(name string, data []byte) error {
 	if !ok {
 		return errors.New(ErrTopicNotExisted)
 	}
-	err := t.push(data)
-	if err != nil {
-		return err
-	}
 
-	log.Printf("key[%s][%s] pushed.", name, string(data))
-	return nil
+	return t.push(data)
 }
 
 func (u *UnitedQueue) setData(key string, data []byte) error {

@@ -35,7 +35,7 @@ func NewLine(name string, recycle time.Duration) (*line, error) {
 }
 
 func loadLine(name string, lineStoreValue lineStore) (*line, error) {
-	log.Printf("loading inflights: %v", lineStoreValue.Inflights)
+	// log.Printf("loading inflights: %v", lineStoreValue.Inflights)
 	inflight := list.New()
 	for index, _ := range lineStoreValue.Inflights {
 		inflight.PushBack(&lineStoreValue.Inflights[index])
@@ -62,7 +62,7 @@ func (l *line) exportLine() (*lineStore, error) {
 		inflights[i] = *msg
 		i++
 	}
-	log.Printf("inflights: %v", inflights)
+	// log.Printf("inflights: %v", inflights)
 
 	ls := new(lineStore)
 	ls.Head = l.head
@@ -72,29 +72,30 @@ func (l *line) exportLine() (*lineStore, error) {
 }
 
 func (l *line) pop() ([]byte, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
 	if l.recycle > 0 {
-		log.Printf("inflight len: %d", l.inflight.Len())
+		now := time.Now()
+		// log.Printf("inflight len: %d", l.inflight.Len())
 		for m := l.inflight.Front(); m != nil; m = m.Next() {
 			msg := m.Value.(*inflightMessage)
 			// log.Printf("finding key[%s/%d] in flights...", l.name, msg.Tid)
-			if time.Now().Before(msg.Exptime) {
+			if now.Before(msg.Exptime) {
 				// log.Printf("key[%s/%d] is not expired, continue...", l.name, msg.Tid)
 				continue
 			} else {
+				l.mu.Lock()
+				defer l.mu.Unlock()
+
 				msg.Exptime = time.Now().Add(l.recycle)
 				// log.Printf("key[%s/%d] is expired.", l.name, msg.Tid)
 
-				log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, msg.Tid)
+				// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, msg.Tid)
 				return l.t.getData(msg.Tid)
 			}
 		}
 	}
 
 	if l.head >= l.t.tail {
-		log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
+		// log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
 		return nil, errors.New(ErrNone)
 	}
 
@@ -102,15 +103,17 @@ func (l *line) pop() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
+	// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.recycle > 0 {
 		msg := new(inflightMessage)
 		msg.Tid = l.head
 		msg.Exptime = time.Now().Add(l.recycle)
 
 		l.inflight.PushBack(msg)
-		log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
+		// log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
 	}
 	l.head++
 
@@ -118,9 +121,6 @@ func (l *line) pop() ([]byte, error) {
 }
 
 func (l *line) confirm(id uint64) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
 	if l.recycle == 0 {
 		return nil
 	}
@@ -131,6 +131,9 @@ func (l *line) confirm(id uint64) error {
 		if msg.Tid < id {
 			continue
 		} else if msg.Tid == id {
+			l.mu.Lock()
+			defer l.mu.Unlock()
+
 			l.inflight.Remove(m)
 			confirmed = true
 			break

@@ -2,7 +2,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
@@ -29,33 +32,33 @@ func init() {
 }
 
 func main() {
+	fmt.Printf("smq started!\n")
+
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Lmicroseconds)
-	log.Printf("smq started!")
 
 	flag.Parse()
 
 	var err error
-
 	var storage store.Storage
 	// storage, err = store.NewMemStore()
 	storage, err = store.NewLevelStore(storePath)
 	if err != nil {
-		log.Printf("store init error: %s", err)
+		fmt.Printf("store init error: %s\n", err)
 		return
 	}
 
 	var messageQueue queue.MessageQueue
 	messageQueue, err = queue.NewUnitedQueue(storage)
 	if err != nil {
-		log.Printf("queue init error: %s", err)
+		fmt.Printf("queue init error: %s\n", err)
 		return
 	}
 
 	var entrance entry.Entrance
 	entrance, err = entry.NewHttpEntry(host, port, messageQueue)
 	if err != nil {
-		log.Printf("entry init error: %s", err)
+		fmt.Printf("entry init error: %s\n", err)
 		return
 	}
 
@@ -68,13 +71,17 @@ func main() {
 		entrance.ListenAndServe()
 	}()
 
-	log.Printf("Serving Entrance...")
+	go func() {
+		log.Println(http.ListenAndServe("localhost:8080", nil))
+	}()
+
+	log.Printf("entrance serving...")
 	select {
 	case signal := <-stop:
 		log.Printf("got signal:%v", signal)
 	}
-	log.Printf("Stopping entrance...")
+	log.Printf("entrance stoping...")
 	entrance.Stop()
-	log.Printf("Waiting on server...")
 	wg.Wait()
+	fmt.Printf("byebye! uq see u later! 😄\n")
 }
