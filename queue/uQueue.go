@@ -61,7 +61,7 @@ func (u *UnitedQueue) Close() {
 func (u *UnitedQueue) loadQueue() error {
 	unitedQueueStoreData, err := u.storage.Get(StorageKeyWord)
 	if err != nil {
-		log.Printf("storage get error: %s", err)
+		log.Printf("storage not existed: %s", err)
 		return nil
 	}
 
@@ -97,6 +97,7 @@ func (u *UnitedQueue) loadQueue() error {
 							lines[lineName] = l
 							l.t = t
 							log.Printf("line[%s] load succ.", lineStoreKey)
+							log.Printf("line: %v", l)
 						}
 					}
 
@@ -249,6 +250,13 @@ func (u *UnitedQueue) Push(name string, data []byte) error {
 
 func (u *UnitedQueue) setData(key string, data []byte) error {
 	return u.storage.Set(key, data)
+	// err := u.storage.Set(key, data)
+	// if err != nil {
+	// 	log.Printf("key[%s] set data error: %s", key, err)
+	// } else {
+	// 	log.Printf("key[%s] set data succ", key)
+	// }
+	// return nil
 }
 
 func (u *UnitedQueue) Pop(name string) ([]byte, error) {
@@ -299,4 +307,10 @@ func (u *UnitedQueue) Confirm(name string) error {
 
 func (u *UnitedQueue) getData(key string) ([]byte, error) {
 	return u.storage.Get(key)
+	// data, err := u.storage.Get(key)
+	// if err != nil {
+	// 	log.Printf("key[%s] get data error: %s", key, err)
+	// 	return nil, err
+	// }
+	// return data, nil
 }

@@ -56,13 +56,14 @@ func (t *topic) CreateLine(name string, recycle time.Duration) error {
 		return errors.New(ErrLineExisted)
 	}
 
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	l, err := NewLine(name, recycle)
 	if err != nil {
 		return err
 	}
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.lines[name] = l
 	l.t = t
 
@@ -71,15 +72,16 @@ func (t *topic) CreateLine(name string, recycle time.Duration) error {
 }
 
 func (t *topic) push(data []byte) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	key := fmt.Sprintf("%s:%d", t.name, t.tail)
 	err := t.q.setData(key, data)
 	if err != nil {
 		return err
 	}
-	// log.Printf("key[%s/%d][%s] pushed.", t.name, t.tail, string(data))
+	// log.Printf("key[%s][%s] pushed.", key, string(data))
 
-	t.mu.Lock()
-	defer t.mu.Unlock()
 	t.tail++
 	return nil
 }

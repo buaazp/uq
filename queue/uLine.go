@@ -72,6 +72,9 @@ func (l *line) exportLine() (*lineStore, error) {
 }
 
 func (l *line) pop() ([]byte, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	if l.recycle > 0 {
 		now := time.Now()
 		// log.Printf("inflight len: %d", l.inflight.Len())
@@ -82,8 +85,6 @@ func (l *line) pop() ([]byte, error) {
 				// log.Printf("key[%s/%d] is not expired, continue...", l.name, msg.Tid)
 				continue
 			} else {
-				l.mu.Lock()
-				defer l.mu.Unlock()
 
 				msg.Exptime = time.Now().Add(l.recycle)
 				// log.Printf("key[%s/%d] is expired.", l.name, msg.Tid)
@@ -105,8 +106,6 @@ func (l *line) pop() ([]byte, error) {
 	}
 	// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	if l.recycle > 0 {
 		msg := new(inflightMessage)
 		msg.Tid = l.head
@@ -125,14 +124,15 @@ func (l *line) confirm(id uint64) error {
 		return nil
 	}
 
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
 	confirmed := false
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
 		msg := m.Value.(*inflightMessage)
 		if msg.Tid < id {
 			continue
 		} else if msg.Tid == id {
-			l.mu.Lock()
-			defer l.mu.Unlock()
 
 			l.inflight.Remove(m)
 			confirmed = true
