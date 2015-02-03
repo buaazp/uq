@@ -20,6 +20,7 @@ import (
 var (
 	host      string
 	port      int
+	front     string
 	backend   string
 	storePath string
 )
@@ -27,22 +28,26 @@ var (
 func init() {
 	flag.StringVar(&host, "h", "0.0.0.0", "listen ip")
 	flag.IntVar(&port, "p", 11211, "listen port")
-	flag.StringVar(&backend, "b", "memory", "store backend")
-	flag.StringVar(&storePath, "s", "./data/uq.db", "store path")
+	flag.StringVar(&front, "f", "mc", "frontend interface")
+	flag.StringVar(&backend, "b", "leveldb", "store backend")
+	flag.StringVar(&storePath, "d", "./data/uq.db", "store path")
 }
 
 func main() {
-	fmt.Printf("smq started!\n")
-
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Lmicroseconds)
+	log.SetPrefix("[uq] ")
 
 	flag.Parse()
+	fmt.Printf("uq started! 😄\n")
 
 	var err error
 	var storage store.Storage
-	// storage, err = store.NewMemStore()
-	storage, err = store.NewLevelStore(storePath)
+	if backend == "leveldb" {
+		storage, err = store.NewLevelStore(storePath)
+	} else if backend == "memory" {
+		storage, err = store.NewMemStore()
+	}
 	if err != nil {
 		fmt.Printf("store init error: %s\n", err)
 		return
@@ -56,7 +61,11 @@ func main() {
 	}
 
 	var entrance entry.Entrance
-	entrance, err = entry.NewHttpEntry(host, port, messageQueue)
+	if front == "http" {
+		entrance, err = entry.NewHttpEntry(host, port, messageQueue)
+	} else {
+		entrance, err = entry.NewMcEntry(host, port, messageQueue)
+	}
 	if err != nil {
 		fmt.Printf("entry init error: %s\n", err)
 		return

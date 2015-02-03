@@ -34,5 +34,15 @@ func (m *MemStore) Set(key string, data []byte) error {
 	return nil
 }
 
+func (m *MemStore) Del(key string) error {
+	_, ok := m.db[key]
+	if !ok {
+		return errors.New(ErrNotExisted)
+	}
+
+	delete(m.db, key)
+	return nil
+}
+
 func (m *MemStore) Close() {
 }

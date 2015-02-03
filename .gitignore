@@ -3,4 +3,6 @@ data/
 uq
 test/bench_reader
 test/bench_writer
+test/McStressTestTool
+*.log
 

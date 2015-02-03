@@ -46,9 +46,10 @@ func main() {
 		return
 	}
 
-	lineName := fmt.Sprintf("%s/x:0s", *topic)
-	log.Printf("lineName: %s", lineName)
-	err = messageQueue.Create(lineName)
+	cr := new(queue.CreateRequest)
+	cr.TopicName = *topic
+	cr.LineName = "x"
+	err = messageQueue.Create(cr)
 	if err != nil && err.Error() != queue.ErrLineExisted {
 		fmt.Printf("line create error: %s\n", err)
 		return
@@ -99,9 +100,9 @@ func subWorker(mq queue.MessageQueue, td time.Duration, line string, rdyChan cha
 	var msgCount int64
 	endTime := time.Now().Add(td)
 	for {
-		_, err := mq.Pop(line)
+		_, _, err := mq.Pop(line)
 		if err != nil {
-			log.Printf("mq pop error: %s\n", err)
+			// log.Printf("mq pop error: %s\n", err)
 		}
 		msgCount++
 		if time.Now().After(endTime) {

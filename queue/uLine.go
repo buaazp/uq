@@ -23,34 +23,7 @@ type lineStore struct {
 	Inflights []inflightMessage
 }
 
-func NewLine(name string, recycle time.Duration) (*line, error) {
-	inflight := list.New()
-	l := new(line)
-	l.name = name
-	l.head = 0
-	l.recycle = recycle
-	l.inflight = inflight
-
-	return l, nil
-}
-
-func loadLine(name string, lineStoreValue lineStore) (*line, error) {
-	// log.Printf("loading inflights: %v", lineStoreValue.Inflights)
-	inflight := list.New()
-	for index, _ := range lineStoreValue.Inflights {
-		inflight.PushBack(&lineStoreValue.Inflights[index])
-	}
-
-	l := new(line)
-	l.name = name
-	l.head = lineStoreValue.Head
-	l.recycle = lineStoreValue.Recycle
-	l.inflight = inflight
-
-	return l, nil
-}
-
-func (l *line) exportLine() (*lineStore, error) {
+func (l *line) genLineStore() (*lineStore, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -71,7 +44,7 @@ func (l *line) exportLine() (*lineStore, error) {
 	return ls, nil
 }
 
-func (l *line) pop() ([]byte, error) {
+func (l *line) pop() (uint64, []byte, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -90,19 +63,23 @@ func (l *line) pop() ([]byte, error) {
 				// log.Printf("key[%s/%d] is expired.", l.name, msg.Tid)
 
 				// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, msg.Tid)
-				return l.t.getData(msg.Tid)
+				data, err := l.t.getData(msg.Tid)
+				if err != nil {
+					return 0, nil, err
+				}
+				return msg.Tid, data, nil
 			}
 		}
 	}
 
 	if l.head >= l.t.tail {
 		// log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
-		return nil, errors.New(ErrNone)
+		return 0, nil, errors.New(ErrNone)
 	}
 
 	data, err := l.t.getData(l.head)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
 
@@ -114,9 +91,10 @@ func (l *line) pop() ([]byte, error) {
 		l.inflight.PushBack(msg)
 		// log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
 	}
+	tid := l.head
 	l.head++
 
-	return data, nil
+	return tid, data, nil
 }
 
 func (l *line) confirm(id uint64) error {
@@ -127,24 +105,18 @@ func (l *line) confirm(id uint64) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	confirmed := false
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
 		msg := m.Value.(*inflightMessage)
 		if msg.Tid < id {
 			continue
 		} else if msg.Tid == id {
-
 			l.inflight.Remove(m)
-			confirmed = true
-			break
+			log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
+			return nil
 		} else {
 			break
 		}
 	}
 
-	if confirmed {
-		log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
-		return nil
-	}
 	return errors.New(ErrNotDelivered)
 }

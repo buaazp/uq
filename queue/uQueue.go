@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -15,14 +14,16 @@ import (
 )
 
 const (
-	StorageKeyWord     string = "UnitedQueueKey"
-	ErrTopicNotExisted string = "Topic Not Existed"
-	ErrLineNotExisted  string = "Line Not Existed"
-	ErrTopicExisted    string = "Topic Has Existed"
-	ErrLineExisted     string = "Line Has Existed"
-	ErrNotDelivered    string = "Message Not Delivered"
-	ErrKey             string = "Key Illegal"
-	ErrNone            string = "No Message"
+	StorageKeyWord     string        = "UnitedQueueKey"
+	ErrTopicNotExisted string        = "Topic Not Existed"
+	ErrLineNotExisted  string        = "Line Not Existed"
+	ErrTopicExisted    string        = "Topic Has Existed"
+	ErrLineExisted     string        = "Line Has Existed"
+	ErrNotDelivered    string        = "Message Not Delivered"
+	ErrKey             string        = "Key Illegal"
+	ErrNone            string        = "No Message"
+	BgCleanInterval    time.Duration = 5 * time.Second
+	BgCleanTimeout     time.Duration = 5 * time.Second
 )
 
 type UnitedQueue struct {
@@ -48,16 +49,6 @@ func NewUnitedQueue(storage store.Storage) (*UnitedQueue, error) {
 	return uq, nil
 }
 
-func (u *UnitedQueue) Close() {
-	log.Printf("uq stoping...")
-	err := u.exportQueue()
-	if err != nil {
-		log.Printf("export queue error: %s", err)
-	}
-
-	u.storage.Close()
-}
-
 func (u *UnitedQueue) loadQueue() error {
 	unitedQueueStoreData, err := u.storage.Get(StorageKeyWord)
 	if err != nil {
@@ -77,36 +68,11 @@ func (u *UnitedQueue) loadQueue() error {
 				var topicStoreValue topicStore
 				dec2 := gob.NewDecoder(bytes.NewBuffer(topicStoreData))
 				if e := dec2.Decode(&topicStoreValue); e == nil {
-					t := new(topic)
-					t.name = topicName
-
-					lines := make(map[string]*line)
-					for _, lineName := range topicStoreValue.Lines {
-						lineStoreKey := fmt.Sprintf("%s/%s", topicName, lineName)
-						lineStoreData, err := u.storage.Get(lineStoreKey)
-						if err != nil || len(lineStoreData) == 0 {
-							continue
-						}
-						var lineStoreValue lineStore
-						dec3 := gob.NewDecoder(bytes.NewBuffer(lineStoreData))
-						if e := dec3.Decode(&lineStoreValue); e == nil {
-							l, err := loadLine(lineName, lineStoreValue)
-							if err != nil {
-								continue
-							}
-							lines[lineName] = l
-							l.t = t
-							log.Printf("line[%s] load succ.", lineStoreKey)
-							log.Printf("line: %v", l)
-						}
+					t, err := u.loadTopic(topicName, topicStoreValue)
+					if err != nil {
+						continue
 					}
-
-					t.lines = lines
-					t.tail = topicStoreValue.Tail
-					t.q = u
 					u.topics[topicName] = t
-					log.Printf("topic[%s] load succ.", topicName)
-					log.Printf("topic: %v", t)
 				}
 			}
 		}
@@ -125,13 +91,13 @@ func (u *UnitedQueue) exportQueue() error {
 	topics := make([]string, len(u.topics))
 	i := 0
 	for topicName, t := range u.topics {
-		topicStoreValue, err := t.exportTopic()
+		topicStoreValue, err := t.genTopicStore()
 		if err != nil {
 			continue
 		}
 
 		for lineName, l := range t.lines {
-			lineStoreValue, err := l.exportLine()
+			lineStoreValue, err := l.genLineStore()
 			if err != nil {
 				continue
 			}
@@ -182,36 +148,25 @@ func (u *UnitedQueue) exportQueue() error {
 	return nil
 }
 
-func (u *UnitedQueue) Create(name string) error {
-	parts := strings.Split(name, "/")
-	tName := parts[0]
-
+func (u *UnitedQueue) Create(cr *CreateRequest) error {
 	var err error
-	if len(parts) == 2 {
-		t, ok := u.topics[tName]
+	if cr.LineName != "" {
+		t, ok := u.topics[cr.TopicName]
 		if !ok {
 			return errors.New(ErrTopicNotExisted)
 		}
 
-		line := parts[1]
-		parts2 := strings.Split(line, ":")
-		if len(parts2) != 2 {
-			return errors.New(ErrKey)
-		}
-		lName := parts2[0]
-		recycle, err := time.ParseDuration(parts2[1])
+		err = t.CreateLine(cr.LineName, cr.Recycle)
 		if err != nil {
-			return err
+			log.Printf("create line[%s] error: %s", cr.LineName, err)
 		}
-		err = t.CreateLine(lName, recycle)
-		if err == nil {
-			err = u.exportQueue()
+		// err = u.exportQueue()
+	} else if cr.TopicName != "" {
+		err = u.createTopic(cr.TopicName)
+		if err != nil {
+			log.Printf("create topic[%s] error: %s", cr.TopicName, err)
 		}
-	} else if len(parts) == 1 {
-		err = u.CreateTopic(tName)
-		if err == nil {
-			err = u.exportQueue()
-		}
+		// err = u.exportQueue()
 	} else {
 		return errors.New(ErrKey)
 	}
@@ -219,7 +174,7 @@ func (u *UnitedQueue) Create(name string) error {
 	return err
 }
 
-func (u *UnitedQueue) CreateTopic(name string) error {
+func (u *UnitedQueue) createTopic(name string) error {
 	_, ok := u.topics[name]
 	if ok {
 		return errors.New(ErrTopicExisted)
@@ -228,18 +183,67 @@ func (u *UnitedQueue) CreateTopic(name string) error {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 
-	t, err := NewTopic(name)
+	t, err := u.newTopic(name)
 	if err != nil {
 		return err
 	}
 	u.topics[name] = t
-	t.q = u
 
 	log.Printf("topic[%s] created.", name)
 	return nil
 }
 
+func (u *UnitedQueue) newTopic(name string) (*topic, error) {
+	lines := make(map[string]*line)
+	t := new(topic)
+	t.name = name
+	t.lines = lines
+	t.head = 0
+	t.tail = 0
+	t.q = u
+	t.quit = make(chan bool)
+
+	t.start()
+	return t, nil
+}
+
+func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*topic, error) {
+	t := new(topic)
+	t.name = topicName
+	t.head = topicStoreValue.Head
+	t.tail = topicStoreValue.Tail
+	t.q = u
+	t.quit = make(chan bool)
+
+	lines := make(map[string]*line)
+	for _, lineName := range topicStoreValue.Lines {
+		lineStoreKey := fmt.Sprintf("%s/%s", topicName, lineName)
+		lineStoreData, err := u.storage.Get(lineStoreKey)
+		if err != nil || len(lineStoreData) == 0 {
+			continue
+		}
+		var lineStoreValue lineStore
+		dec3 := gob.NewDecoder(bytes.NewBuffer(lineStoreData))
+		if e := dec3.Decode(&lineStoreValue); e == nil {
+			l, err := t.loadLine(lineName, lineStoreValue)
+			if err != nil {
+				continue
+			}
+			lines[lineName] = l
+			log.Printf("line[%s] load succ.", lineStoreKey)
+			log.Printf("line: %v", l)
+		}
+	}
+	t.lines = lines
+
+	t.start()
+	log.Printf("topic[%s] load succ.", topicName)
+	log.Printf("topic: %v", t)
+	return t, nil
+}
+
 func (u *UnitedQueue) Push(name string, data []byte) error {
+
 	t, ok := u.topics[name]
 	if !ok {
 		return errors.New(ErrTopicNotExisted)
@@ -259,10 +263,10 @@ func (u *UnitedQueue) setData(key string, data []byte) error {
 	// return nil
 }
 
-func (u *UnitedQueue) Pop(name string) ([]byte, error) {
+func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 2 {
-		return nil, errors.New(ErrKey)
+		return 0, nil, errors.New(ErrKey)
 	}
 
 	tName := parts[0]
@@ -271,38 +275,20 @@ func (u *UnitedQueue) Pop(name string) ([]byte, error) {
 	t, ok := u.topics[tName]
 	if !ok {
 		log.Printf("topic[%s] not existed.", tName)
-		return nil, errors.New(ErrTopicNotExisted)
+		return 0, nil, errors.New(ErrTopicNotExisted)
 	}
 
 	return t.pop(lName)
 }
 
-func (u *UnitedQueue) Confirm(name string) error {
-	parts := strings.Split(name, "/")
-	if len(parts) != 3 {
-		return errors.New(ErrKey)
-	}
-
-	tName := parts[0]
-	lName := parts[1]
-
-	str := strings.Trim(parts[2], " ")
-	if len(str) <= 0 {
-		return errors.New(ErrKey)
-	}
-	i, err := strconv.Atoi(str)
-	if err != nil || i < 0 {
-		return errors.New(ErrKey)
-	}
-	id := uint64(i)
-
-	t, ok := u.topics[tName]
+func (u *UnitedQueue) Confirm(cr *ConfirmRequest) error {
+	t, ok := u.topics[cr.TopicName]
 	if !ok {
-		log.Printf("topic[%s] not existed.", tName)
+		log.Printf("topic[%s] not existed.", cr.TopicName)
 		return errors.New(ErrTopicNotExisted)
 	}
 
-	return t.confirm(lName, id)
+	return t.confirm(cr.LineName, cr.ID)
 }
 
 func (u *UnitedQueue) getData(key string) ([]byte, error) {
@@ -313,4 +299,28 @@ func (u *UnitedQueue) getData(key string) ([]byte, error) {
 	// 	return nil, err
 	// }
 	// return data, nil
+}
+
+func (u *UnitedQueue) delData(key string) error {
+	return u.storage.Del(key)
+	// err := u.storage.Del(key)
+	// if err != nil {
+	// 	log.Printf("key[%s] del data error: %s", key, err)
+	// 	return err
+	// }
+	// return nil
+}
+
+func (u *UnitedQueue) Close() {
+	log.Printf("uq stoping...")
+	for _, t := range u.topics {
+		t.quit <- true
+	}
+
+	err := u.exportQueue()
+	if err != nil {
+		log.Printf("export queue error: %s", err)
+	}
+
+	u.storage.Close()
 }

@@ -27,22 +27,37 @@ func NewLevelStore(path string) (*LevelStore, error) {
 
 func (l *LevelStore) Set(key string, data []byte) error {
 	keyByte := []byte(key)
-	err := l.db.Put(keyByte, data, nil)
-	if err != nil {
-		return err
-	}
+	return l.db.Put(keyByte, data, nil)
 
-	return nil
+	// err := l.db.Put(keyByte, data, nil)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// return nil
 }
 
 func (l *LevelStore) Get(key string) ([]byte, error) {
 	keyByte := []byte(key)
-	data, err := l.db.Get(keyByte, nil)
-	if err != nil {
-		return nil, err
-	}
+	return l.db.Get(keyByte, nil)
 
-	return data, nil
+	// data, err := l.db.Get(keyByte, nil)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// return data, nil
+}
+
+func (l *LevelStore) Del(key string) error {
+	keyByte := []byte(key)
+	return l.db.Delete(keyByte, nil)
+
+	// err := l.db.Delete(keyByte, nil)
+	// if err != nil {
+	// 	return err
+	// }
+	// return nil
 }
 
 func (l *LevelStore) Close() {
