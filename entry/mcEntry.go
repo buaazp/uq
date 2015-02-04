@@ -288,8 +288,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			return
 		}
 		if len(data) > 0 {
-			log.Printf("key: %s id: %v data: %v", req.Key, id, string(data))
-
+			// log.Printf("key: %s id: %v data: %v", req.Key, id, string(data))
 			item := new(Item)
 			item.Body = data
 			resp.key = fmt.Sprintf("%s/%d", req.Key, id)
@@ -424,6 +423,6 @@ func WriteFull(w io.Writer, buf []byte) error {
 
 func (m *McEntry) Stop() {
 	log.Printf("mc entry stoping...")
-	m.messageQueue.Close()
 	m.stopListener.Stop()
+	m.messageQueue.Close()
 }

@@ -15,12 +15,11 @@ import (
 )
 
 type HttpEntry struct {
-	Host          string
-	Port          int
-	maxBodyLength int
-	server        *http.Server
-	stopListener  *StopListener
-	messageQueue  queue.MessageQueue
+	host         string
+	port         int
+	server       *http.Server
+	stopListener *StopListener
+	messageQueue queue.MessageQueue
 }
 
 func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*HttpEntry, error) {
@@ -37,9 +36,8 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	server.Addr = addr
 	server.Handler = router
 
-	h.Host = host
-	h.Port = port
-	h.maxBodyLength = MaxBodyLength
+	h.host = host
+	h.port = port
 	h.server = server
 	h.messageQueue = messageQueue
 
@@ -47,7 +45,7 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 }
 
 func (h *HttpEntry) createHandler(w http.ResponseWriter, req *http.Request) {
-	limitedr := ioutils.NewLimitedBufferReader(req.Body, h.maxBodyLength)
+	limitedr := ioutils.NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
 		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
@@ -96,7 +94,7 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	t := vars["topic"]
 
-	limitedr := ioutils.NewLimitedBufferReader(req.Body, h.maxBodyLength)
+	limitedr := ioutils.NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
 		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
@@ -113,7 +111,7 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *HttpEntry) confirmHandler(w http.ResponseWriter, req *http.Request) {
-	limitedr := ioutils.NewLimitedBufferReader(req.Body, h.maxBodyLength)
+	limitedr := ioutils.NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
 		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
@@ -155,6 +153,6 @@ func (h *HttpEntry) ListenAndServe() error {
 
 func (h *HttpEntry) Stop() {
 	log.Printf("http entry stoping...")
-	h.messageQueue.Close()
 	h.stopListener.Stop()
+	h.messageQueue.Close()
 }

@@ -1,8 +1,11 @@
 package queue
 
 import (
+	"bytes"
 	"container/list"
+	"encoding/gob"
 	"errors"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -23,28 +26,7 @@ type lineStore struct {
 	Inflights []inflightMessage
 }
 
-func (l *line) genLineStore() (*lineStore, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	log.Printf("start export line...")
-	inflights := make([]inflightMessage, l.inflight.Len())
-	i := 0
-	for m := l.inflight.Front(); m != nil; m = m.Next() {
-		msg := m.Value.(*inflightMessage)
-		inflights[i] = *msg
-		i++
-	}
-	// log.Printf("inflights: %v", inflights)
-
-	ls := new(lineStore)
-	ls.Head = l.head
-	ls.Recycle = l.recycle
-	ls.Inflights = inflights
-	return ls, nil
-}
-
-func (l *line) pop() (uint64, []byte, error) {
+func (l *line) Pop() (uint64, []byte, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -97,7 +79,7 @@ func (l *line) pop() (uint64, []byte, error) {
 	return tid, data, nil
 }
 
-func (l *line) confirm(id uint64) error {
+func (l *line) Confirm(id uint64) error {
 	if l.recycle == 0 {
 		return nil
 	}
@@ -119,4 +101,48 @@ func (l *line) confirm(id uint64) error {
 	}
 
 	return errors.New(ErrNotDelivered)
+}
+
+func (l *line) ExportLine() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	log.Printf("start export line[%s]...", l.name)
+
+	lineStoreValue, err := l.genLineStore()
+	if err != nil {
+		return err
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	enc := gob.NewEncoder(buffer)
+	err = enc.Encode(lineStoreValue)
+	if err != nil {
+		return err
+	}
+
+	lineStoreKey := fmt.Sprintf("%s/%s", l.t.name, l.name)
+	err = l.t.q.storage.Set(lineStoreKey, buffer.Bytes())
+	if err != nil {
+		return err
+	}
+
+	log.Printf("line[%s] export finisded.", l.name)
+	return nil
+}
+
+func (l *line) genLineStore() (*lineStore, error) {
+	inflights := make([]inflightMessage, l.inflight.Len())
+	i := 0
+	for m := l.inflight.Front(); m != nil; m = m.Next() {
+		msg := m.Value.(*inflightMessage)
+		inflights[i] = *msg
+		i++
+	}
+	// log.Printf("inflights: %v", inflights)
+
+	ls := new(lineStore)
+	ls.Head = l.head
+	ls.Recycle = l.recycle
+	ls.Inflights = inflights
+	return ls, nil
 }
