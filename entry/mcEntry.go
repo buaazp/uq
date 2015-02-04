@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/buaazp/uq/queue"
+	"github.com/buaazp/uq/utils"
 )
 
 const (
@@ -291,7 +292,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			// log.Printf("key: %s id: %v data: %v", req.Key, id, string(data))
 			item := new(Item)
 			item.Body = data
-			resp.key = fmt.Sprintf("%s/%d", req.Key, id)
+			resp.key = utils.Acati(req.Key, "/", id)
 			resp.item = item
 		}
 

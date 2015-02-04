@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -94,7 +93,7 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 
 	lines := make(map[string]*line)
 	for _, lineName := range topicStoreValue.Lines {
-		lineStoreKey := fmt.Sprintf("%s/%s", topicName, lineName)
+		lineStoreKey := topicName + "/" + lineName
 		lineStoreData, err := u.storage.Get(lineStoreKey)
 		if err != nil || len(lineStoreData) == 0 {
 			continue

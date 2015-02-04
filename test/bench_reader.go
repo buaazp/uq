@@ -54,7 +54,7 @@ func main() {
 		fmt.Printf("line create error: %s\n", err)
 		return
 	}
-	line := fmt.Sprintf("%s/x", *topic)
+	line := *topic + "/x"
 	log.Printf("line: %s", line)
 
 	goChan := make(chan int)

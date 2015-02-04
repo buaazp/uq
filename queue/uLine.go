@@ -5,7 +5,6 @@ import (
 	"container/list"
 	"encoding/gob"
 	"errors"
-	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -120,7 +119,7 @@ func (l *line) ExportLine() error {
 		return err
 	}
 
-	lineStoreKey := fmt.Sprintf("%s/%s", l.t.name, l.name)
+	lineStoreKey := l.t.name + "/" + l.name
 	err = l.t.q.storage.Set(lineStoreKey, buffer.Bytes())
 	if err != nil {
 		return err

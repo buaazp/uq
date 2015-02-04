@@ -4,5 +4,6 @@ uq
 test/bench_reader
 test/bench_writer
 test/mc_bench
+test/testAcati
 *.log
 

@@ -38,7 +38,7 @@ func initQueue() {
 		log.Printf("add error: %v", err)
 	}
 
-	fullLineName := fmt.Sprintf("%s/%s", topicName, lineName)
+	fullLineName := topicName + "/" + lineName
 	err = mc.Add(&memcache.Item{Key: fullLineName, Value: []byte{}})
 	if err != nil {
 		log.Printf("add error: %v", err)
@@ -49,11 +49,11 @@ func setTestSingle(ch chan bool, cn, n int) {
 	var err error
 	var mc *memcache.Client
 	conn := fmt.Sprintf("%s:%d", host, port)
+	v := make([]byte, 200)
 	mc = memcache.New(conn)
 	for i := 0; i < n; i++ {
-		v := fmt.Sprintf("Value-c%d:%d", cn, i)
 		start := time.Now()
-		err = mc.Set(&memcache.Item{Key: topicName, Value: []byte(v)})
+		err = mc.Set(&memcache.Item{Key: topicName, Value: v})
 		if err != nil {
 			log.Printf("set error: c%d %v", cn, err)
 		} else {
@@ -82,7 +82,7 @@ func setTest(c, n int) {
 func getTestSingle(ch chan bool, cn, n int) {
 	var mc *memcache.Client
 	conn := fmt.Sprintf("%s:%d", host, port)
-	key := fmt.Sprintf("%s/%s", topicName, lineName)
+	key := topicName + "/" + lineName
 	mc = memcache.New(conn)
 	for i := 0; i < n; i++ {
 		start := time.Now()

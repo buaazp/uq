@@ -75,7 +75,7 @@ func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	t := vars["topic"]
 	l := vars["line"]
-	key := fmt.Sprintf("%s/%s", t, l)
+	key := t + "/" + l
 
 	id, data, err := h.messageQueue.Pop(key)
 	if err != nil || len(data) <= 0 {

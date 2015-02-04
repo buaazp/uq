@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+func Acati(str, b string, n uint64) string {
+	ns := strconv.FormatUint(n, 10)
+	return str + b + ns
+}
+
 func Atoi(str string) int {
 	str = strings.Trim(str, " ")
 	if len(str) > 0 {

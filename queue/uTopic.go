@@ -5,10 +5,11 @@ import (
 	"container/list"
 	"encoding/gob"
 	"errors"
-	"fmt"
 	"log"
 	"sync"
 	"time"
+
+	"github.com/buaazp/uq/utils"
 )
 
 type topic struct {
@@ -130,7 +131,7 @@ func (t *topic) Push(data []byte) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	key := fmt.Sprintf("%s:%d", t.name, t.tail)
+	key := utils.Acati(t.name, ":", t.tail)
 	err := t.q.setData(key, data)
 	if err != nil {
 		return err
@@ -163,7 +164,7 @@ func (t *topic) confirm(name string, id uint64) error {
 }
 
 func (t *topic) getData(id uint64) ([]byte, error) {
-	key := fmt.Sprintf("%s:%d", t.name, id)
+	key := utils.Acati(t.name, ":", id)
 	return t.q.getData(key)
 }
 
@@ -229,7 +230,7 @@ func (t *topic) Clean() (quit bool) {
 			return
 		}
 
-		key := fmt.Sprintf("%s:%d", t.name, i)
+		key := utils.Acati(t.name, ":", i)
 		err := t.q.delData(key)
 		if err != nil {
 			log.Printf("del data[%s] error; %s", key, err)
