@@ -11,12 +11,13 @@ import (
 )
 
 type line struct {
-	mu       sync.Mutex
-	name     string
-	head     uint64
-	recycle  time.Duration
-	inflight *list.List
-	t        *topic
+	name         string
+	head         uint64
+	headLock     sync.RWMutex
+	recycle      time.Duration
+	inflight     *list.List
+	inflightLock sync.RWMutex
+	t            *topic
 }
 
 type lineStore struct {
@@ -26,34 +27,35 @@ type lineStore struct {
 }
 
 func (l *line) Pop() (uint64, []byte, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.inflightLock.Lock()
+	defer l.inflightLock.Unlock()
 
 	if l.recycle > 0 {
 		now := time.Now()
-		// log.Printf("inflight len: %d", l.inflight.Len())
-		for m := l.inflight.Front(); m != nil; m = m.Next() {
+
+		m := l.inflight.Front()
+		if m != nil {
 			msg := m.Value.(*inflightMessage)
-			// log.Printf("finding key[%s/%d] in flights...", l.name, msg.Tid)
-			if now.Before(msg.Exptime) {
-				// log.Printf("key[%s/%d] is not expired, continue...", l.name, msg.Tid)
-				continue
-			} else {
-
-				msg.Exptime = time.Now().Add(l.recycle)
+			if now.After(msg.Exptime) {
 				// log.Printf("key[%s/%d] is expired.", l.name, msg.Tid)
-
-				// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, msg.Tid)
+				msg.Exptime = now.Add(l.recycle)
 				data, err := l.t.getData(msg.Tid)
 				if err != nil {
 					return 0, nil, err
 				}
+				l.inflight.Remove(m)
+				l.inflight.PushBack(msg)
+				// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, msg.Tid)
 				return msg.Tid, data, nil
 			}
 		}
 	}
 
-	if l.head >= l.t.tail {
+	l.headLock.Lock()
+	defer l.headLock.Unlock()
+
+	topicTail := l.t.getTail()
+	if l.head >= topicTail {
 		// log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
 		return 0, nil, errors.New(ErrNone)
 	}
@@ -83,8 +85,8 @@ func (l *line) Confirm(id uint64) error {
 		return nil
 	}
 
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.inflightLock.Lock()
+	defer l.inflightLock.Unlock()
 
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
 		msg := m.Value.(*inflightMessage)
@@ -103,8 +105,6 @@ func (l *line) Confirm(id uint64) error {
 }
 
 func (l *line) ExportLine() error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	log.Printf("start export line[%s]...", l.name)
 
 	lineStoreValue, err := l.genLineStore()
@@ -130,6 +130,9 @@ func (l *line) ExportLine() error {
 }
 
 func (l *line) genLineStore() (*lineStore, error) {
+	l.inflightLock.RLock()
+	defer l.inflightLock.RUnlock()
+
 	inflights := make([]inflightMessage, l.inflight.Len())
 	i := 0
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
@@ -140,8 +143,29 @@ func (l *line) genLineStore() (*lineStore, error) {
 	// log.Printf("inflights: %v", inflights)
 
 	ls := new(lineStore)
+	l.headLock.RLock()
 	ls.Head = l.head
+	l.headLock.RUnlock()
 	ls.Recycle = l.recycle
 	ls.Inflights = inflights
 	return ls, nil
+}
+
+func (l *line) isBlank() bool {
+	l.inflightLock.RLock()
+	defer l.inflightLock.RUnlock()
+	if l.recycle > 0 && l.inflight.Len() > 0 {
+		log.Printf("%s l.recycle: %d l.inflight.Len(): %d", l.name, l.recycle, l.inflight.Len())
+		return false
+	}
+
+	topicTail := l.t.getTail()
+	l.headLock.RLock()
+	defer l.headLock.RUnlock()
+	if l.head < topicTail {
+		log.Printf("%s l.head: %d %s t.tail: %d", l.name, l.head, l.t.name, topicTail)
+		return false
+	}
+
+	return true
 }

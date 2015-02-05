@@ -27,9 +27,9 @@ const (
 )
 
 type UnitedQueue struct {
-	mu      sync.Mutex
-	topics  map[string]*topic
-	storage store.Storage
+	topics     map[string]*topic
+	topicsLock sync.RWMutex
+	storage    store.Storage
 }
 
 type unitedQueueStore struct {
@@ -72,7 +72,9 @@ func (u *UnitedQueue) loadQueue() error {
 					if err != nil {
 						continue
 					}
+					u.topicsLock.Lock()
 					u.topics[topicName] = t
+					u.topicsLock.Unlock()
 				}
 			}
 		}
@@ -119,12 +121,15 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 }
 
 func (u *UnitedQueue) Create(cr *CreateRequest) error {
-	u.mu.Lock()
-	defer u.mu.Unlock()
+	if cr.TopicName == "" {
+		return errors.New(ErrKey)
+	}
 
 	var err error
 	if cr.LineName != "" {
+		u.topicsLock.RLock()
 		t, ok := u.topics[cr.TopicName]
+		u.topicsLock.RUnlock()
 		if !ok {
 			return errors.New(ErrTopicNotExisted)
 		}
@@ -133,20 +138,20 @@ func (u *UnitedQueue) Create(cr *CreateRequest) error {
 		if err != nil {
 			log.Printf("create line[%s] error: %s", cr.LineName, err)
 		}
-	} else if cr.TopicName != "" {
+	} else {
 		err = u.createTopic(cr.TopicName)
 		if err != nil {
 			log.Printf("create topic[%s] error: %s", cr.TopicName, err)
 		}
-	} else {
-		return errors.New(ErrKey)
 	}
 
 	return err
 }
 
 func (u *UnitedQueue) createTopic(name string) error {
+	u.topicsLock.RLock()
 	_, ok := u.topics[name]
+	u.topicsLock.RUnlock()
 	if ok {
 		return errors.New(ErrTopicExisted)
 	}
@@ -155,7 +160,10 @@ func (u *UnitedQueue) createTopic(name string) error {
 	if err != nil {
 		return err
 	}
+
+	u.topicsLock.Lock()
 	u.topics[name] = t
+	u.topicsLock.Unlock()
 
 	err = u.exportQueue()
 	if err != nil {
@@ -206,6 +214,9 @@ func (u *UnitedQueue) exportQueue() error {
 }
 
 func (u *UnitedQueue) genQueueStore() (*unitedQueueStore, error) {
+	u.topicsLock.RLock()
+	defer u.topicsLock.RUnlock()
+
 	topics := make([]string, len(u.topics))
 	i := 0
 	for topicName, _ := range u.topics {
@@ -219,7 +230,9 @@ func (u *UnitedQueue) genQueueStore() (*unitedQueueStore, error) {
 }
 
 func (u *UnitedQueue) Push(name string, data []byte) error {
+	u.topicsLock.RLock()
 	t, ok := u.topics[name]
+	u.topicsLock.RUnlock()
 	if !ok {
 		return errors.New(ErrTopicNotExisted)
 	}
@@ -236,7 +249,9 @@ func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {
 	tName := parts[0]
 	lName := parts[1]
 
+	u.topicsLock.RLock()
 	t, ok := u.topics[tName]
+	u.topicsLock.RUnlock()
 	if !ok {
 		log.Printf("topic[%s] not existed.", tName)
 		return 0, nil, errors.New(ErrTopicNotExisted)
@@ -246,7 +261,9 @@ func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {
 }
 
 func (u *UnitedQueue) Confirm(cr *ConfirmRequest) error {
+	u.topicsLock.RLock()
 	t, ok := u.topics[cr.TopicName]
+	u.topicsLock.RUnlock()
 	if !ok {
 		log.Printf("topic[%s] not existed.", cr.TopicName)
 		return errors.New(ErrTopicNotExisted)
@@ -287,9 +304,6 @@ func (u *UnitedQueue) delData(key string) error {
 }
 
 func (u *UnitedQueue) Close() {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-
 	log.Printf("uq stoping...")
 	for _, t := range u.topics {
 		close(t.quit)
@@ -304,6 +318,9 @@ func (u *UnitedQueue) Close() {
 }
 
 func (u *UnitedQueue) exportTopics() error {
+	u.topicsLock.RLock()
+	defer u.topicsLock.RUnlock()
+
 	for _, t := range u.topics {
 		err := t.exportLines()
 		if err != nil {

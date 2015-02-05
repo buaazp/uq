@@ -13,12 +13,14 @@ import (
 )
 
 type topic struct {
-	mu    sync.Mutex
-	name  string
-	lines map[string]*line
-	head  uint64
-	tail  uint64
-	q     *UnitedQueue
+	name      string
+	lines     map[string]*line
+	linesLock sync.RWMutex
+	head      uint64
+	headLock  sync.RWMutex
+	tail      uint64
+	tailLock  sync.RWMutex
+	q         *UnitedQueue
 
 	quit chan bool
 }
@@ -36,20 +38,21 @@ func (t *topic) start() {
 }
 
 func (t *topic) CreateLine(name string, recycle time.Duration) error {
+	t.linesLock.RLock()
 	_, ok := t.lines[name]
+	t.linesLock.RUnlock()
 	if ok {
 		return errors.New(ErrLineExisted)
 	}
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	l, err := t.newLine(name, recycle)
 	if err != nil {
 		return err
 	}
 
+	t.linesLock.Lock()
 	t.lines[name] = l
+	t.linesLock.Unlock()
 
 	err = t.exportTopic()
 	if err != nil {
@@ -96,6 +99,9 @@ func (t *topic) exportTopic() error {
 }
 
 func (t *topic) genTopicStore() (*topicStore, error) {
+	t.linesLock.RLock()
+	defer t.linesLock.RUnlock()
+
 	lines := make([]string, len(t.lines))
 	i := 0
 	for _, line := range t.lines {
@@ -105,8 +111,12 @@ func (t *topic) genTopicStore() (*topicStore, error) {
 
 	ts := new(topicStore)
 	ts.Lines = lines
+	t.headLock.RLock()
 	ts.Head = t.head
+	t.headLock.RUnlock()
+	t.tailLock.RLock()
 	ts.Tail = t.tail
+	t.tailLock.RUnlock()
 
 	return ts, nil
 }
@@ -128,8 +138,8 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 }
 
 func (t *topic) Push(data []byte) error {
-	t.mu.Lock()
-	defer t.mu.Unlock()
+	t.tailLock.Lock()
+	defer t.tailLock.Unlock()
 
 	key := utils.Acati(t.name, ":", t.tail)
 	err := t.q.setData(key, data)
@@ -144,7 +154,9 @@ func (t *topic) Push(data []byte) error {
 }
 
 func (t *topic) pop(name string) (uint64, []byte, error) {
+	t.linesLock.RLock()
 	l, ok := t.lines[name]
+	t.linesLock.RUnlock()
 	if !ok {
 		log.Printf("line[%s] not existed.", name)
 		return 0, nil, errors.New(ErrLineNotExisted)
@@ -154,7 +166,9 @@ func (t *topic) pop(name string) (uint64, []byte, error) {
 }
 
 func (t *topic) confirm(name string, id uint64) error {
+	t.linesLock.RLock()
 	l, ok := t.lines[name]
+	t.linesLock.RUnlock()
 	if !ok {
 		log.Printf("line[%s] not existed.", name)
 		return errors.New(ErrLineNotExisted)
@@ -201,17 +215,21 @@ func (t *topic) Clean() (quit bool) {
 		return
 	}
 
+	t.tailLock.RLock()
 	topicTail := t.tail
+	t.tailLock.RUnlock()
+	t.headLock.RLock()
 	starting := t.head
+	t.headLock.RUnlock()
 	terminal := starting
 	endTime := time.Now().Add(BgCleanTimeout)
 	log.Printf("topic[%s] begin to clean at %d", t.name, starting)
 
 	defer func() {
 		if terminal != starting {
-			t.mu.Lock()
-			defer t.mu.Unlock()
+			t.headLock.Lock()
 			t.head = terminal
+			t.headLock.Unlock()
 			log.Printf("garbage[%d - %d] are cleaned", starting, terminal)
 		}
 	}()
@@ -243,8 +261,14 @@ func (t *topic) Clean() (quit bool) {
 }
 
 func (t *topic) isClear() bool {
-	if t.tail == 0 || t.head == t.tail-1 {
-		log.Printf("%s t.head: %d t.tail: %d", t.name, t.head, t.tail)
+	t.tailLock.RLock()
+	topicTail := t.tail
+	t.tailLock.RUnlock()
+	t.headLock.RLock()
+	topicHead := t.head
+	t.headLock.RUnlock()
+	if topicTail == 0 || topicHead == topicTail-1 {
+		log.Printf("%s t.head: %d t.tail: %d", t.name, topicHead, topicTail)
 		return true
 	}
 	log.Printf("topic[%s] is clear.", t.name)
@@ -252,19 +276,17 @@ func (t *topic) isClear() bool {
 }
 
 func (t *topic) isBlank() bool {
-	if len(t.lines) == 0 {
+	t.linesLock.RLock()
+	defer t.linesLock.RUnlock()
+
+	linesLen := len(t.lines)
+	if linesLen == 0 {
 		log.Printf("topic[%s] has no line.", t.name)
 		return false
 	}
 
 	for _, l := range t.lines {
-		if l.recycle > 0 && l.inflight.Len() > 0 {
-			log.Printf("%s l.recycle: %d l.inflight.Len(): %d", l.name, l.recycle, l.inflight.Len())
-			return false
-		}
-
-		if l.head < t.tail {
-			log.Printf("%s l.head: %d %s t.tail: %d", l.name, l.head, t.name, t.tail)
+		if !l.isBlank() {
 			return false
 		}
 	}
@@ -292,8 +314,6 @@ func (t *topic) backgroundBackup() {
 
 func (t *topic) Backup() {
 	log.Printf("topic[%s] is backing up...", t.name)
-	t.mu.Lock()
-	defer t.mu.Unlock()
 
 	err := t.exportTopic()
 	if err != nil {
@@ -303,6 +323,9 @@ func (t *topic) Backup() {
 }
 
 func (t *topic) exportLines() error {
+	t.linesLock.RLock()
+	defer t.linesLock.RUnlock()
+
 	for lineName, l := range t.lines {
 		err := l.ExportLine()
 		if err != nil {
@@ -313,4 +336,10 @@ func (t *topic) exportLines() error {
 
 	log.Printf("topic[%s]'s all lines exported.", t.name)
 	return nil
+}
+
+func (t *topic) getTail() uint64 {
+	t.tailLock.RLock()
+	defer t.tailLock.RUnlock()
+	return t.tail
 }
