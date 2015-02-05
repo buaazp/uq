@@ -59,7 +59,7 @@ func setTestSingle(ch chan bool, cn, n int) {
 		} else {
 			end := time.Now()
 			duration := end.Sub(start).Seconds()
-			log.Printf("set succ: %s - %s spend: %.3fms", topicName, v, duration*1000)
+			log.Printf("set succ: %s spend: %.3fms", topicName, duration*1000)
 		}
 	}
 	ch <- true
@@ -92,7 +92,7 @@ func getTestSingle(ch chan bool, cn, n int) {
 		} else {
 			end := time.Now()
 			duration := end.Sub(start).Seconds()
-			log.Printf("get succ: %s - %s spend: %.3fms", item.Key, string(item.Value), duration*1000)
+			log.Printf("get succ: %s spend: %.3fms", item.Key, duration*1000)
 		}
 	}
 	ch <- true
