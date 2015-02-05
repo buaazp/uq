@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +25,12 @@ const (
 	BgBackupInterval   time.Duration = 10 * time.Second
 	BgCleanInterval    time.Duration = 20 * time.Second
 	BgCleanTimeout     time.Duration = 5 * time.Second
+	KeyTopicStore      string        = ":store"
+	KeyTopicHead       string        = ":head"
+	KeyTopicTail       string        = ":tail"
+	KeyLineStore       string        = ":store"
+	KeyLineHead        string        = ":head"
+	KeyLineRecycle     string        = ":recycle"
 )
 
 type UnitedQueue struct {
@@ -88,10 +95,31 @@ func (u *UnitedQueue) loadQueue() error {
 func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*topic, error) {
 	t := new(topic)
 	t.name = topicName
-	t.head = topicStoreValue.Head
-	t.tail = topicStoreValue.Tail
 	t.q = u
 	t.quit = make(chan bool)
+	// t.head = topicStreValue.Head
+	// t.tail = topicStoreValue.Tail
+
+	t.headKey = topicName + KeyTopicHead
+	topicHeadData, err := u.storage.Get(t.headKey)
+	if err != nil {
+		return nil, err
+	}
+	topicHead, err := strconv.ParseUint(string(topicHeadData), 10, 0)
+	if err != nil {
+		return nil, err
+	}
+	t.head = topicHead
+	t.tailKey = topicName + KeyTopicTail
+	topicTailData, err := u.storage.Get(t.tailKey)
+	if err != nil {
+		return nil, err
+	}
+	topicTail, err := strconv.ParseUint(string(topicTailData), 10, 0)
+	if err != nil {
+		return nil, err
+	}
+	t.tail = topicTail
 
 	lines := make(map[string]*line)
 	for _, lineName := range topicStoreValue.Lines {
@@ -134,7 +162,7 @@ func (u *UnitedQueue) Create(cr *CreateRequest) error {
 			return errors.New(ErrTopicNotExisted)
 		}
 
-		err = t.CreateLine(cr.LineName, cr.Recycle)
+		err = t.createLine(cr.LineName, cr.Recycle)
 		if err != nil {
 			log.Printf("create line[%s] error: %s", cr.LineName, err)
 		}
@@ -181,10 +209,20 @@ func (u *UnitedQueue) newTopic(name string) (*topic, error) {
 	t.name = name
 	t.lines = lines
 	t.head = 0
+	t.headKey = name + KeyTopicHead
 	t.tail = 0
+	t.tailKey = name + KeyTopicTail
 	t.q = u
 	t.quit = make(chan bool)
 
+	err := t.exportHead()
+	if err != nil {
+		return nil, err
+	}
+	err = t.exportTail()
+	if err != nil {
+		return nil, err
+	}
 	t.start()
 	return t, nil
 }
@@ -237,7 +275,7 @@ func (u *UnitedQueue) Push(name string, data []byte) error {
 		return errors.New(ErrTopicNotExisted)
 	}
 
-	return t.Push(data)
+	return t.push(data)
 }
 
 func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {

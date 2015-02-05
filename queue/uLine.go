@@ -26,7 +26,7 @@ type lineStore struct {
 	Inflights []inflightMessage
 }
 
-func (l *line) Pop() (uint64, []byte, error) {
+func (l *line) pop() (uint64, []byte, error) {
 	l.inflightLock.Lock()
 	defer l.inflightLock.Unlock()
 
@@ -80,7 +80,7 @@ func (l *line) Pop() (uint64, []byte, error) {
 	return tid, data, nil
 }
 
-func (l *line) Confirm(id uint64) error {
+func (l *line) confirm(id uint64) error {
 	if l.recycle == 0 {
 		return nil
 	}
@@ -104,7 +104,7 @@ func (l *line) Confirm(id uint64) error {
 	return errors.New(ErrNotDelivered)
 }
 
-func (l *line) ExportLine() error {
+func (l *line) exportLine() error {
 	log.Printf("start export line[%s]...", l.name)
 
 	lineStoreValue, err := l.genLineStore()

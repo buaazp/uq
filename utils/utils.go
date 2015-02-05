@@ -10,10 +10,10 @@ func Acati(str, b string, n uint64) string {
 	return str + b + ns
 }
 
-func Atoi(str string) int {
+func Atoi(str string) uint64 {
 	str = strings.Trim(str, " ")
 	if len(str) > 0 {
-		i, err := strconv.Atoi(str)
+		i, err := strconv.ParseUint(str, 10, 0)
 		if err != nil {
 			return 0
 		} else {
