@@ -63,8 +63,10 @@ func main() {
 	var entrance entry.Entrance
 	if front == "http" {
 		entrance, err = entry.NewHttpEntry(host, port, messageQueue)
-	} else {
+	} else if front == "mc" {
 		entrance, err = entry.NewMcEntry(host, port, messageQueue)
+	} else if front == "redis" {
+		entrance, err = entry.NewRedisEntry(host, port, messageQueue)
 	}
 	if err != nil {
 		fmt.Printf("entry init error: %s\n", err)

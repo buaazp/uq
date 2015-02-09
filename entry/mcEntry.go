@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/buaazp/uq/queue"
-	"github.com/buaazp/uq/utils"
+	. "github.com/buaazp/uq/utils"
 )
 
 const (
@@ -292,7 +292,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			// log.Printf("key: %s id: %v data: %v", req.Key, id, string(data))
 			item := new(Item)
 			item.Body = data
-			resp.key = utils.Acati(req.Key, "/", id)
+			resp.key = Acati(req.Key, "/", id)
 			resp.item = item
 		}
 
