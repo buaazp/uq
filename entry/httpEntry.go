@@ -10,7 +10,6 @@ import (
 	"strconv"
 
 	"github.com/buaazp/uq/queue"
-	"github.com/coreos/etcd/pkg/ioutils"
 	"github.com/gorilla/mux"
 )
 
@@ -45,7 +44,7 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 }
 
 func (h *HttpEntry) createHandler(w http.ResponseWriter, req *http.Request) {
-	limitedr := ioutils.NewLimitedBufferReader(req.Body, MaxBodyLength)
+	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
 		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
@@ -94,7 +93,7 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	t := vars["topic"]
 
-	limitedr := ioutils.NewLimitedBufferReader(req.Body, MaxBodyLength)
+	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
 		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
@@ -111,7 +110,7 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *HttpEntry) confirmHandler(w http.ResponseWriter, req *http.Request) {
-	limitedr := ioutils.NewLimitedBufferReader(req.Body, MaxBodyLength)
+	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
 		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
