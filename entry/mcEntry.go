@@ -2,6 +2,7 @@ package entry
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -74,25 +75,27 @@ func (m *McEntry) handlerConn(conn net.Conn) {
 	wbuf := bufio.NewWriter(conn)
 
 	for {
-		req := new(Request)
-		resp, quit := m.Read(rbuf, req)
-		if quit {
-			break
-		}
-		if resp != nil {
-			resp.Write(wbuf)
-			wbuf.Flush()
-			continue
+		req, err := m.Read(rbuf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				resp := new(Response)
+				resp.status = "ERROR"
+				resp.msg = err.Error()
+				resp.Write(wbuf)
+				wbuf.Flush()
+				continue
+			}
 		}
 
-		resp, quit = m.Process(req)
+		resp, quit := m.Process(req)
 		if quit {
 			break
 		}
 		if resp == nil {
 			continue
 		}
-
 		if !resp.noreply {
 			resp.Write(wbuf)
 			wbuf.Flush()
@@ -100,9 +103,9 @@ func (m *McEntry) handlerConn(conn net.Conn) {
 		}
 	}
 
-	log.Printf("handler closing...")
+	log.Printf("conn %s closing...", addr)
 	if err := conn.Close(); err != nil {
-		log.Printf("Close error: %s", err)
+		log.Printf("conn %s close error: %s", addr, err)
 	}
 
 	return
@@ -116,154 +119,113 @@ type Item struct {
 }
 
 type Request struct {
-	Cmd     string // get, set, delete, quit, etc.
-	Key     string // key
+	Cmd     string   // get, set, delete, quit, etc.
+	Keys    []string // key
 	Item    *Item
 	NoReply bool
 }
 
-func (m *McEntry) Read(b *bufio.Reader, req *Request) (resp *Response, quit bool) {
-	resp = new(Response)
-	resp.status = "ERROR"
-	quit = false
+func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
 	s, err := b.ReadString('\n')
 	if err != nil {
-		if err == io.EOF {
-			quit = true
-		}
 		log.Println("readstring failed: ", err)
-		return
+		return nil, err
 	}
 	if !strings.HasSuffix(s, "\r\n") {
 		log.Println("has not suffix")
-		return
+		return nil, errors.New(ERR_C_FORMAT)
 	}
 	parts := strings.Fields(s)
 	if len(parts) < 1 {
 		log.Println("cmd fiedld error")
-		return
+		return nil, errors.New(ERR_C_FORMAT)
 	}
 
+	req := new(Request)
 	req.Cmd = parts[0]
-	resp.status = "CLIENT_ERROR"
 	switch req.Cmd {
 	case "get", "gets":
 		if len(parts) < 2 {
 			log.Println("cmd parts error")
-			resp.msg = ERR_C_FORMAT
-			return
+			return nil, errors.New(ERR_C_FORMAT)
 		}
-		req.Key = parts[1]
+		req.Keys = parts[1:]
 
 	case "set", "add":
 		if len(parts) < 5 || len(parts) > 7 {
 			log.Println("cmd parts error")
-			resp.msg = ERR_C_FORMAT
-			return
+			return nil, errors.New(ERR_C_FORMAT)
 		}
-		req.Key = parts[1]
-		req.Item = new(Item)
-		item := req.Item
+		req.Keys = parts[1:2]
+		item := new(Item)
 		item.Flag, err = strconv.Atoi(parts[2])
 		if err != nil {
 			log.Println("flag atoi failed: ", err)
-			resp.msg = ERR_C_FORMAT
-			return
+			return nil, errors.New(ERR_C_FORMAT)
 		}
-		// item.Exptime, err = strconv.Atoi(parts[3])
-		// if err != nil {
-		// 	log.Println("exptime atoi failed: ", err)
-		// 	resp.msg = ERR_C_FORMAT
-		// 	return
-		// }
+		item.Exptime, err = strconv.Atoi(parts[3])
+		if err != nil {
+			log.Println("exptime atoi failed: ", err)
+			return nil, errors.New(ERR_C_FORMAT)
+		}
 		length, err := strconv.Atoi(parts[4])
 		if err != nil {
 			log.Println("length atoi failed: ", err)
-			resp.msg = ERR_C_FORMAT
-			return
+			return nil, errors.New(ERR_C_FORMAT)
 		}
 		if length > MaxBodyLength {
 			log.Println("data length too large")
-			resp.msg = ERR_C_DLENGTH
-			return
+			return nil, errors.New(ERR_C_DLENGTH)
 		}
-		// if req.Cmd == "cas" {
-		// 	if len(parts) < 6 {
-		// 		log.Println("cmd parts error")
-		// 		resp.msg = ERR_C_FORMAT
-		// 		return
-		// 	}
-		// 	item.Cas, err = strconv.Atoi(parts[5])
-		// 	if err != nil {
-		// 		log.Println("cas atoi failed: ", err)
-		// 		resp.msg = ERR_C_FORMAT
-		// 		return
-		// 	}
-		// 	if len(parts) > 6 && parts[6] != "noreply" {
-		// 		log.Println("cmd parts error")
-		// 		resp.msg = ERR_C_FORMAT
-		// 		return
-		// 	}
-		// 	req.NoReply = len(parts) > 6 && parts[6] == "noreply"
-		// } else {
 		if len(parts) > 5 && parts[5] != "noreply" {
 			log.Println("cmd parts error")
-			resp.msg = ERR_C_FORMAT
-			return
+			return nil, errors.New(ERR_C_FORMAT)
 		}
 		req.NoReply = len(parts) > 5 && parts[5] == "noreply"
-		// }
 
 		item.Body = make([]byte, length)
 		_, err = io.ReadFull(b, item.Body)
 		if err != nil {
-			if err == io.EOF {
-				quit = true
-			}
 			log.Println("readfull failed: ", err)
-			resp.msg = ERR_C_DCHUNK
-			return
+			return nil, err
 		}
 		remain, _, err := b.ReadLine()
 		if err != nil {
-			if err == io.EOF {
-				quit = true
-			}
 			log.Println("readline failed: ", err)
-			resp.msg = ERR_C_DCHUNK
-			return
+			return nil, err
 		}
 		if len(remain) != 0 {
 			log.Println("bad data chunk", len(remain))
-			resp.msg = ERR_C_DCHUNK
-			return
+			return nil, errors.New(ERR_C_DCHUNK)
 		}
+		req.Item = item
 
 	case "delete":
 		if len(parts) < 2 || len(parts) > 4 {
 			log.Println("cmd parts error")
-			resp.msg = ERR_C_FORMAT
-			return
+			return nil, errors.New(ERR_C_FORMAT)
 		}
-		req.Key = parts[1]
+		req.Keys = parts[1:2]
 		req.NoReply = len(parts) > 2 && parts[len(parts)-1] == "noreply"
 
 	case "quit", "version", "flush_all":
+	case "replace", "cas", "append", "prepend":
+	case "incr", "decr":
+	case "stats":
+	case "verbosity":
 
 	default:
 		log.Printf("unknow cmd: %s\n", req.Cmd)
-		resp.msg = "unknow command"
-		return
+		return nil, errors.New("unknow command: " + req.Cmd)
 	}
-	return nil, false
+	return req, nil
 }
 
 type Response struct {
 	status  string
 	msg     string
 	noreply bool
-	key     string
-	item    *Item
+	items   map[string]*Item
 }
 
 func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
@@ -274,13 +236,15 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 
 	switch req.Cmd {
 	case "get", "gets":
-		key := req.Key
-		if len(key) > MaxKeyLength {
-			resp.status = "CLIENT_ERROR"
-			resp.msg = "bad key too long"
-			return
+		for _, k := range req.Keys {
+			if len(k) > MaxKeyLength {
+				resp.status = "CLIENT_ERROR"
+				resp.msg = "bad key too long"
+				return
+			}
 		}
 
+		key := req.Keys[0]
 		resp.status = "VALUE"
 		id, data, err := m.messageQueue.Pop(key)
 		if err != nil {
@@ -290,14 +254,23 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		}
 		if len(data) > 0 {
 			// log.Printf("key: %s id: %v data: %v", req.Key, id, string(data))
-			item := new(Item)
-			item.Body = data
-			resp.key = Acati(req.Key, "/", id)
-			resp.item = item
+			itemMsg := new(Item)
+			itemMsg.Body = data
+			items := make(map[string]*Item)
+			items[key] = itemMsg
+
+			if len(req.Keys) > 1 {
+				keyID := req.Keys[1]
+				itemID := new(Item)
+				itemID.Body = []byte(Acati(key, "/", id))
+				items[keyID] = itemID
+			}
+
+			resp.items = items
 		}
 
 	case "add":
-		key := req.Key
+		key := req.Keys[0]
 
 		cr := new(queue.CreateRequest)
 		parts := strings.Split(key, "/")
@@ -332,7 +305,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		resp.status = "STORED"
 
 	case "set":
-		key := req.Key
+		key := req.Keys[0]
 		err = m.messageQueue.Push(key, req.Item.Body)
 		if err != nil {
 			resp.status = "SERVER_ERROR"
@@ -342,7 +315,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		resp.status = "STORED"
 
 	case "delete":
-		key := req.Key
+		key := req.Keys[0]
 
 		cr := new(queue.ConfirmRequest)
 		parts := strings.Split(key, "/")
@@ -378,6 +351,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 	default:
 		// client error
 		resp.status = "ERROR"
+		resp.msg = ERR_C_FORMAT
 	}
 	return
 }
@@ -389,13 +363,14 @@ func (resp *Response) Write(w io.Writer) error {
 
 	switch resp.status {
 	case "VALUE":
-		if resp.item != nil {
-			item := resp.item
-			fmt.Fprintf(w, "VALUE %s %d %d\r\n", resp.key, item.Flag, len(item.Body))
-			if e := WriteFull(w, item.Body); e != nil {
-				return e
+		if resp.items != nil {
+			for key, item := range resp.items {
+				fmt.Fprintf(w, "VALUE %s %d %d\r\n", key, item.Flag, len(item.Body))
+				if e := WriteFull(w, item.Body); e != nil {
+					return e
+				}
+				WriteFull(w, []byte("\r\n"))
 			}
-			WriteFull(w, []byte("\r\n"))
 		}
 		io.WriteString(w, "END\r\n")
 

@@ -21,11 +21,18 @@ const (
 
 // 存放指令格式规则，参数范围
 var cmdrules = map[string][]interface{}{
+	// queue
+	"QADD":  []interface{}{2, 3},
+	"QPUSH": []interface{}{3, 3},
+	"QPOP":  []interface{}{2, 2},
+	"QMPOP": []interface{}{2, 2},
+	"QDEL":  []interface{}{2, 2},
 	// key
 	"DEL":     []interface{}{2, -1},
 	"TYPE":    []interface{}{2, 2},
 	"KEYNEXT": []interface{}{2, -1},
 	// string
+	"APPEND": []interface{}{3, 3},
 	"GET":    []interface{}{2, 2},
 	"SET":    []interface{}{3, -1},
 	"MGET":   []interface{}{2, -1},

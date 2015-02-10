@@ -116,14 +116,16 @@ func (r *RedisEntry) Process(session *Session, cmd *Command) (reply *Reply) {
 func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Reply) {
 	cmdName := cmd.Name()
 
-	if cmdName == "ADD" {
-		reply = r.OnADD(cmd)
-	} else if cmdName == "SET" {
-		reply = r.OnSET(cmd)
-	} else if cmdName == "GET" {
-		reply = r.OnGET(cmd)
-	} else if cmdName == "DEL" {
-		reply = r.OnDEL(cmd)
+	if cmdName == "QADD" {
+		reply = r.OnQadd(cmd)
+	} else if cmdName == "QPUSH" {
+		reply = r.OnQpush(cmd)
+	} else if cmdName == "QPOP" {
+		reply = r.OnQpop(cmd)
+	} else if cmdName == "QMPOP" {
+		reply = r.OnQmpop(cmd)
+	} else if cmdName == "QDEL" {
+		reply = r.OnQdel(cmd)
 	} else {
 		reply = r.OnUndefined(session, cmd)
 	}
@@ -132,7 +134,7 @@ func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Repl
 }
 
 func (r *RedisEntry) OnUndefined(session *Session, cmd *Command) (reply *Reply) {
-	return ErrorReply("NotSupported: " + cmd.String())
+	return ErrorReply("uq NotSupported: " + cmd.String())
 }
 
 func (r *RedisEntry) Stop() {
