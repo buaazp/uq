@@ -1,10 +1,9 @@
-package goredis
+package entry
 
 import (
 	"strconv"
 )
 
-// 缓存下标对应的字符串
 var itoaNums []string
 
 func init() {
@@ -14,7 +13,6 @@ func init() {
 	}
 }
 
-// 经过缓存优化的itoa函数，减少strconv.Itoa的调用
 func itoa(i int) string {
 	if i > 0 && i < len(itoaNums) {
 		return itoaNums[i]

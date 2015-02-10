@@ -5,8 +5,6 @@ package entry
 import (
 	"errors"
 	"strings"
-
-	. "github.com/buaazp/uq/entry/goredis"
 )
 
 var (

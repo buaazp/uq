@@ -73,8 +73,8 @@ func (m *McEntry) handlerConn(conn net.Conn) {
 	rbuf := bufio.NewReader(conn)
 	wbuf := bufio.NewWriter(conn)
 
-	req := new(Request)
 	for {
+		req := new(Request)
 		resp, quit := m.Read(rbuf, req)
 		if quit {
 			break

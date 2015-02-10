@@ -1,17 +1,21 @@
+// Copyright 2013 Latermoon. All rights reserved.
+
+// 使用Go实现RedisServer，并提供Redis协议读写所需要的各种方法
 package entry
 
 import (
 	"fmt"
 	"log"
+	"net"
 	"time"
 
-	. "github.com/buaazp/uq/entry/goredis"
 	"github.com/buaazp/uq/queue"
-	"github.com/latermoon/GoRedis/libs/stdlog"
 )
 
-// Command属性
 const (
+	CR        = '\r'
+	LF        = '\n'
+	CRLF      = "\r\n"
 	C_SESSION = "session"
 	C_ELAPSED = "elapsed"
 )
@@ -19,7 +23,7 @@ const (
 type RedisEntry struct {
 	host         string
 	port         int
-	redisServer  *RedisServer
+	stopListener *StopListener
 	messageQueue queue.MessageQueue
 }
 
@@ -27,42 +31,76 @@ func NewRedisEntry(host string, port int, messageQueue queue.MessageQueue) (*Red
 	rs := new(RedisEntry)
 	rs.host = host
 	rs.port = port
-	redisServer := new(RedisServer)
-	redisServer.SetHandler(rs)
-	rs.redisServer = redisServer
 	rs.messageQueue = messageQueue
 	return rs, nil
 }
 
 func (r *RedisEntry) ListenAndServe() error {
 	addr := fmt.Sprintf("%s:%d", r.host, r.port)
-	return r.redisServer.Listen(addr)
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	stopListener, err := NewStopListener(l)
+	if err != nil {
+		return err
+	}
+	r.stopListener = stopListener
+
+	for {
+		conn, err := r.stopListener.Accept()
+		if err != nil {
+			log.Printf("Accept failed: %s\n", err)
+			return err
+		}
+		go r.handlerConn(NewSession(conn))
+	}
+
+	return nil
 }
 
-// ServerHandler.SessionOpened()
-func (r *RedisEntry) SessionOpened(session *Session) {
-	log.Println("connection accepted from", session.RemoteAddr())
+// 处理一个客户端连接
+func (r *RedisEntry) handlerConn(session *Session) {
+	var err error
+	addr := session.RemoteAddr().String()
+	log.Printf("handleClient: %s", addr)
+
+	for {
+		var cmd *Command
+		cmd, err = session.ReadCommand()
+		// 常见的error是:
+		// 1) io.EOF
+		// 2) read tcp 127.0.0.1:51863: connection reset by peer
+		if err != nil {
+			break
+		}
+		// 处理
+		reply := r.Process(session, cmd)
+		if reply != nil {
+			err = session.WriteReply(reply)
+			if err != nil {
+				break
+			}
+		}
+	}
+
+	log.Printf("session %s closing...", addr)
+	if err := session.Close(); err != nil {
+		log.Printf("session %s close error: %s", addr, err)
+	}
+
+	return
 }
 
-// ServerHandler.SessionClosed()
-func (r *RedisEntry) SessionClosed(session *Session, err error) {
-	log.Println("end connection", session.RemoteAddr(), err)
-}
-
-func (r *RedisEntry) ExceptionCaught(err error) {
-	log.Printf("exception %s\n", err)
-}
-
-// ServerHandler.On()
-// 由GoRedis协议层触发，通过反射调用OnGET/OnSET等方法
-func (r *RedisEntry) On(session *Session, cmd *Command) (reply *Reply) {
+func (r *RedisEntry) Process(session *Session, cmd *Command) (reply *Reply) {
 	// invoke & time
 	begin := time.Now()
 	cmd.SetAttribute(C_SESSION, session)
 
 	// varify command
 	if err := verifyCommand(cmd); err != nil {
-		stdlog.Printf("[%s] bad command %s\n", session.RemoteAddr(), cmd)
+		log.Printf("[%s] bad command %s\n", session.RemoteAddr(), cmd)
 		return ErrorReply(err)
 	}
 
@@ -99,6 +137,6 @@ func (r *RedisEntry) OnUndefined(session *Session, cmd *Command) (reply *Reply) 
 
 func (r *RedisEntry) Stop() {
 	log.Printf("redis entry stoping...")
-	r.redisServer.Stop()
+	r.stopListener.Stop()
 	r.messageQueue.Close()
 }

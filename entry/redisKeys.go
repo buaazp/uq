@@ -1,11 +1,11 @@
 package entry
 
 import (
+	"log"
 	"strconv"
 	"strings"
 	"time"
 
-	. "github.com/buaazp/uq/entry/goredis"
 	"github.com/buaazp/uq/queue"
 )
 
@@ -65,7 +65,7 @@ func (r *RedisEntry) OnADD(cmd *Command) (reply *Reply) {
 
 func (r *RedisEntry) OnDEL(cmd *Command) (reply *Reply) {
 	keys := cmd.Args()[1:]
-	var n int
+	var n int = 0
 	for _, key := range keys {
 		cr := new(queue.ConfirmRequest)
 		parts := strings.Split(string(key), "/")
@@ -82,9 +82,11 @@ func (r *RedisEntry) OnDEL(cmd *Command) (reply *Reply) {
 		}
 		err := r.messageQueue.Confirm(cr)
 		if err != nil {
+			log.Printf("confirm error: %s", err)
 			continue
+		} else {
+			n++
 		}
-		n++
 	}
 	reply = IntegerReply(n)
 	return

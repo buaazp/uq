@@ -10,7 +10,6 @@ import (
 	"strconv"
 
 	"github.com/buaazp/uq/queue"
-	. "github.com/buaazp/uq/utils"
 	"github.com/coreos/etcd/pkg/ioutils"
 	"github.com/gorilla/mux"
 )

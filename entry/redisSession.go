@@ -1,6 +1,6 @@
 // Copyright 2013 Latermoon. All rights reserved.
 
-package goredis
+package entry
 
 import (
 	"bufio"

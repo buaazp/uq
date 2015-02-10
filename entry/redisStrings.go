@@ -2,8 +2,6 @@ package entry
 
 // TODO 严谨的情况下应该校验参数数量，这里大部分都不校验是为了简化代码，panic后会断开client connection
 
-import . "github.com/buaazp/uq/entry/goredis"
-
 var maxCmdLock = 100
 
 func (r *RedisEntry) OnGET(cmd *Command) (reply *Reply) {

@@ -82,7 +82,7 @@ func (l *line) pop() (uint64, []byte, error) {
 
 func (l *line) confirm(id uint64) error {
 	if l.recycle == 0 {
-		return nil
+		return errors.New(ErrNotDelivered)
 	}
 
 	l.inflightLock.Lock()
