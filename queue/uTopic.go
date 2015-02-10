@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
@@ -18,8 +19,10 @@ type topic struct {
 	linesLock sync.RWMutex
 	head      uint64
 	headLock  sync.RWMutex
+	headKey   string
 	tail      uint64
 	tailLock  sync.RWMutex
+	tailKey   string
 	q         *UnitedQueue
 
 	quit chan bool
@@ -27,17 +30,14 @@ type topic struct {
 
 type topicStore struct {
 	Lines []string
-	Head  uint64
-	Tail  uint64
 }
 
 func (t *topic) start() {
 	log.Printf("topic[%s] is starting...", t.name)
 	go t.backgroundClean()
-	go t.backgroundBackup()
 }
 
-func (t *topic) CreateLine(name string, recycle time.Duration) error {
+func (t *topic) createLine(name string, recycle time.Duration) error {
 	t.linesLock.RLock()
 	_, ok := t.lines[name]
 	t.linesLock.RUnlock()
@@ -76,6 +76,28 @@ func (t *topic) newLine(name string, recycle time.Duration) (*line, error) {
 	return l, nil
 }
 
+func (t *topic) getHead() uint64 {
+	t.headLock.RLock()
+	defer t.headLock.RUnlock()
+	return t.head
+}
+
+func (t *topic) getTail() uint64 {
+	t.tailLock.RLock()
+	defer t.tailLock.RUnlock()
+	return t.tail
+}
+
+func (t *topic) exportHead() error {
+	topicHeadData := []byte(strconv.FormatUint(t.head, 10))
+	return t.q.storage.Set(t.headKey, topicHeadData)
+}
+
+func (t *topic) exportTail() error {
+	topicTailData := []byte(strconv.FormatUint(t.tail, 10))
+	return t.q.storage.Set(t.tailKey, topicTailData)
+}
+
 func (t *topic) exportTopic() error {
 	topicStoreValue, err := t.genTopicStore()
 	if err != nil {
@@ -111,15 +133,10 @@ func (t *topic) genTopicStore() (*topicStore, error) {
 
 	ts := new(topicStore)
 	ts.Lines = lines
-	t.headLock.RLock()
-	ts.Head = t.head
-	t.headLock.RUnlock()
-	t.tailLock.RLock()
-	ts.Tail = t.tail
-	t.tailLock.RUnlock()
 
 	return ts, nil
 }
+
 func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, error) {
 	// log.Printf("loading inflights: %v", lineStoreValue.Inflights)
 	inflight := list.New()
@@ -137,7 +154,7 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	return l, nil
 }
 
-func (t *topic) Push(data []byte) error {
+func (t *topic) push(data []byte) error {
 	t.tailLock.Lock()
 	defer t.tailLock.Unlock()
 
@@ -149,6 +166,11 @@ func (t *topic) Push(data []byte) error {
 	// log.Printf("key[%s][%s] pushed.", key, string(data))
 
 	t.tail++
+	err = t.exportTail()
+	if err != nil {
+		t.tail--
+		return err
+	}
 
 	return nil
 }
@@ -162,7 +184,7 @@ func (t *topic) pop(name string) (uint64, []byte, error) {
 		return 0, nil, errors.New(ErrLineNotExisted)
 	}
 
-	return l.Pop()
+	return l.pop()
 }
 
 func (t *topic) confirm(name string, id uint64) error {
@@ -174,7 +196,7 @@ func (t *topic) confirm(name string, id uint64) error {
 		return errors.New(ErrLineNotExisted)
 	}
 
-	return l.Confirm(id)
+	return l.confirm(id)
 }
 
 func (t *topic) getData(id uint64) ([]byte, error) {
@@ -191,7 +213,7 @@ func (t *topic) backgroundClean() {
 	for {
 		select {
 		case <-cleanTick.C:
-			quit := t.Clean()
+			quit := t.clean()
 			if quit {
 				log.Printf("t.clean return quit: %v", quit)
 				return
@@ -203,7 +225,7 @@ func (t *topic) backgroundClean() {
 	}
 }
 
-func (t *topic) Clean() (quit bool) {
+func (t *topic) clean() (quit bool) {
 	quit = false
 	if t.isClear() {
 		log.Printf("topic[%s] is clear. needn't clean.", t.name)
@@ -215,46 +237,55 @@ func (t *topic) Clean() (quit bool) {
 		return
 	}
 
-	t.tailLock.RLock()
-	topicTail := t.tail
-	t.tailLock.RUnlock()
 	t.headLock.RLock()
+	defer t.headLock.RUnlock()
+
 	starting := t.head
-	t.headLock.RUnlock()
-	terminal := starting
 	endTime := time.Now().Add(BgCleanTimeout)
 	log.Printf("topic[%s] begin to clean at %d", t.name, starting)
 
 	defer func() {
-		if terminal != starting {
-			t.headLock.Lock()
-			t.head = terminal
-			t.headLock.Unlock()
-			log.Printf("garbage[%d - %d] are cleaned", starting, terminal)
+		if t.head != starting {
+			log.Printf("garbage[%d - %d] are cleaned", starting, t.head)
 		}
 	}()
 
+	t.tailLock.RLock()
+	topicTail := t.tail
+	t.tailLock.RUnlock()
 	for i := starting; i < topicTail; i++ {
 		select {
 		case <-t.quit:
-			log.Printf("catched quit at %d", terminal)
+			quit = true
+			log.Printf("catched quit at %d", i)
 			return
 		default:
 			// nothing todo
 		}
 
 		if time.Now().After(endTime) {
-			log.Printf("cleaning timeout, break at %d", terminal)
+			log.Printf("cleaning timeout, break at %d", i)
+			return
+		}
+
+		t.head = i + 1
+		err := t.exportHead()
+		if err != nil {
+			log.Printf("export topic[%s] head error: %s", t.name, err)
 			return
 		}
 
 		key := utils.Acati(t.name, ":", i)
-		err := t.q.delData(key)
+		err = t.q.delData(key)
 		if err != nil {
 			log.Printf("del data[%s] error; %s", key, err)
+			t.head = i
+			err = t.exportHead()
+			if err != nil {
+				log.Printf("export topic[%s] head failed after delData error: %s", t.name, err)
+			}
 			return
 		}
-		terminal = i
 	}
 
 	return
@@ -295,39 +326,12 @@ func (t *topic) isBlank() bool {
 	return true
 }
 
-func (t *topic) backgroundBackup() {
-	defer func() {
-		log.Printf("background backup exit.")
-	}()
-
-	backupTick := time.NewTicker(BgBackupInterval)
-	for {
-		select {
-		case <-backupTick.C:
-			t.Backup()
-		case <-t.quit:
-			log.Printf("background backup catched quit")
-			return
-		}
-	}
-}
-
-func (t *topic) Backup() {
-	log.Printf("topic[%s] is backing up...", t.name)
-
-	err := t.exportTopic()
-	if err != nil {
-		log.Printf("export topic[%s] error: %s", t.name, err)
-	}
-	log.Printf("topic[%s] backup succ.", t.name)
-}
-
 func (t *topic) exportLines() error {
 	t.linesLock.RLock()
 	defer t.linesLock.RUnlock()
 
 	for lineName, l := range t.lines {
-		err := l.ExportLine()
+		err := l.exportLine()
 		if err != nil {
 			log.Printf("line[%s] export error: %s", lineName, err)
 			continue
@@ -336,10 +340,4 @@ func (t *topic) exportLines() error {
 
 	log.Printf("topic[%s]'s all lines exported.", t.name)
 	return nil
-}
-
-func (t *topic) getTail() uint64 {
-	t.tailLock.RLock()
-	defer t.tailLock.RUnlock()
-	return t.tail
 }
