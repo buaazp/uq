@@ -1,6 +1,3 @@
-// Copyright 2013 Latermoon. All rights reserved.
-
-// 使用Go实现RedisServer，并提供Redis协议读写所需要的各种方法
 package entry
 
 import (
@@ -60,7 +57,6 @@ func (r *RedisEntry) ListenAndServe() error {
 	return nil
 }
 
-// 处理一个客户端连接
 func (r *RedisEntry) handlerConn(session *Session) {
 	var err error
 	addr := session.RemoteAddr().String()
@@ -69,13 +65,12 @@ func (r *RedisEntry) handlerConn(session *Session) {
 	for {
 		var cmd *Command
 		cmd, err = session.ReadCommand()
-		// 常见的error是:
 		// 1) io.EOF
 		// 2) read tcp 127.0.0.1:51863: connection reset by peer
 		if err != nil {
+			log.Printf("session read command error: %s", err)
 			break
 		}
-		// 处理
 		reply := r.Process(session, cmd)
 		if reply != nil {
 			err = session.WriteReply(reply)

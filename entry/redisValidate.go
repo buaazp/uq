@@ -1,7 +1,5 @@
 package entry
 
-// 验证指令是否合法
-// 传入的参数数量，key里是否包含非法字符
 import (
 	"errors"
 	"strings"
@@ -13,13 +11,11 @@ var (
 	WrongCommandKey    = errors.New("wrong command key")
 )
 
-// RuleIndex，对于cmdrules的索引位置
 const (
 	RI_MinCount = iota
 	RI_MaxCount // -1 for undefined
 )
 
-// 存放指令格式规则，参数范围
 var cmdrules = map[string][]interface{}{
 	// queue
 	"QADD":  []interface{}{2, 3},
@@ -83,7 +79,6 @@ var cmdrules = map[string][]interface{}{
 	"AOF":    []interface{}{2, 2},
 }
 
-// 验证指令参数数量、非法字符等
 func verifyCommand(cmd *Command) error {
 	if cmd == nil || cmd.Len() == 0 {
 		return BadCommandError
@@ -108,7 +103,6 @@ func verifyCommand(cmd *Command) error {
 		}
 	}
 
-	// 拒绝使用内部关键字 #[]
 	if cmd.Len() > 1 {
 		key := cmd.StringAtIndex(1)
 		if strings.ContainsAny(key, "#[] ") {

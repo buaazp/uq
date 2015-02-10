@@ -1,5 +1,3 @@
-// Copyright 2013 Latermoon. All rights reserved.
-
 package entry
 
 import (
@@ -9,7 +7,6 @@ import (
 	"strconv"
 )
 
-// Command表示一个客户端指令
 type Command struct {
 	args  [][]byte
 	attrs map[string]interface{}
@@ -31,12 +28,10 @@ func (cmd *Command) GetAttribute(name string) interface{} {
 	return cmd.attrs[name]
 }
 
-// 大写的指令名称
 func (cmd *Command) Name() string {
 	return string(bytes.ToUpper(cmd.args[0]))
 }
 
-// 原始数据
 func (cmd *Command) Args() [][]byte {
 	return cmd.args
 }
@@ -86,7 +81,6 @@ func (cmd *Command) Len() int {
 	return len(cmd.args)
 }
 
-// Redis协议的Command数据
 /*
 *<number of arguments> CR LF
 $<number of bytes of argument 1> CR LF

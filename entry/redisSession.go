@@ -1,5 +1,3 @@
-// Copyright 2013 Latermoon. All rights reserved.
-
 package entry
 
 import (
@@ -12,11 +10,6 @@ import (
 	"strconv"
 )
 
-// Session继承了net.Conn，代表一个客户端会话
-// 提供各种标准的Reply方法, Status/Error/Integer/Bulk/MultiBulks
-// cmd, err := session.ReadCommand()
-// session.WriteReply(StatusReply("OK"))
-// 协议参考：http://redis.io/topics/protocol
 type Session struct {
 	net.Conn
 	rw    *bufio.Reader
@@ -40,7 +33,6 @@ func (s *Session) GetAttribute(name string) interface{} {
 	return s.attrs[name]
 }
 
-// 返回数据到客户端
 func (s *Session) WriteReply(reply *Reply) (err error) {
 	switch reply.Type {
 	case ReplyTypeStatus:
@@ -64,7 +56,6 @@ func (s *Session) WriteCommand(cmd *Command) (err error) {
 	return
 }
 
-// 从连接里读取回复
 /*
 In a Status Reply the first byte of the reply is "+"
 In an Error Reply the first byte of the reply is "-"
@@ -146,8 +137,6 @@ func (s *Session) ReadReply() (reply *Reply, err error) {
 	return
 }
 
-// 从客户端连接获取指令
-// (下面读取过程，线上应用前需要增加错误校验，数据大小限制)
 /*
 *<number of arguments> CR LF
 $<number of bytes of argument 1> CR LF
@@ -316,8 +305,6 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 // ====================================
 // io
 // ====================================
-
-// 验证并跳过指定的字节，用于开始符和结束符的判断
 func (s *Session) skipByte(c byte) (err error) {
 	var tmp byte
 	tmp, err = s.rw.ReadByte()
@@ -340,7 +327,6 @@ func (s *Session) skipBytes(bs []byte) (err error) {
 	return
 }
 
-// 读取一行
 func (s *Session) readLine() (line []byte, err error) {
 	line, err = s.rw.ReadSlice(LF)
 	if err == bufio.ErrBufferFull {
@@ -356,7 +342,6 @@ func (s *Session) readLine() (line []byte, err error) {
 	return line[:i], nil
 }
 
-// 读取字符串，遇到CRLF换行为止
 func (s *Session) readString() (str string, err error) {
 	var line []byte
 	if line, err = s.readLine(); err != nil {
@@ -388,7 +373,6 @@ func (s *Session) ReadInt64() (i int64, err error) {
 	return s.readInt64()
 }
 
-// 覆盖提供读buffer
 func (s *Session) Read(p []byte) (n int, err error) {
 	return s.rw.Read(p)
 }
@@ -397,7 +381,6 @@ func (s *Session) ReadByte() (c byte, err error) {
 	return s.rw.ReadByte()
 }
 
-// 获取字节而不移动游标
 func (s *Session) PeekByte() (c byte, err error) {
 	if b, e := s.rw.Peek(1); e == nil {
 		c = b[0]
