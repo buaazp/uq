@@ -18,11 +18,13 @@ const (
 
 var cmdrules = map[string][]interface{}{
 	// queue
-	"QADD":  []interface{}{2, 3},
-	"QPUSH": []interface{}{3, 3},
-	"QPOP":  []interface{}{2, 2},
-	"QMPOP": []interface{}{2, 2},
-	"QDEL":  []interface{}{2, 2},
+	"QADD":   []interface{}{2, 3},
+	"QPUSH":  []interface{}{3, 3},
+	"QMPUSH": []interface{}{3, -1},
+	"QPOP":   []interface{}{2, 2},
+	"QMPOP":  []interface{}{3, -1},
+	"QDEL":   []interface{}{2, 2},
+	"QMDEL":  []interface{}{2, -1},
 	// key
 	"DEL":     []interface{}{2, -1},
 	"TYPE":    []interface{}{2, 2},

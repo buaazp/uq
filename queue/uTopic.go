@@ -175,6 +175,31 @@ func (t *topic) push(data []byte) error {
 	return nil
 }
 
+func (t *topic) mPush(datas [][]byte) error {
+	t.tailLock.Lock()
+	defer t.tailLock.Unlock()
+
+	oldTail := t.tail
+	for _, data := range datas {
+		key := utils.Acati(t.name, ":", t.tail)
+		err := t.q.setData(key, data)
+		if err != nil {
+			t.tail = oldTail
+			return err
+		}
+		// log.Printf("key[%s][%s] pushed.", key, string(data))
+		t.tail++
+	}
+
+	err := t.exportTail()
+	if err != nil {
+		t.tail = oldTail
+		return err
+	}
+
+	return nil
+}
+
 func (t *topic) pop(name string) (uint64, []byte, error) {
 	t.linesLock.RLock()
 	l, ok := t.lines[name]
@@ -185,6 +210,18 @@ func (t *topic) pop(name string) (uint64, []byte, error) {
 	}
 
 	return l.pop()
+}
+
+func (t *topic) mPop(name string, n int) ([]uint64, [][]byte, error) {
+	t.linesLock.RLock()
+	l, ok := t.lines[name]
+	t.linesLock.RUnlock()
+	if !ok {
+		log.Printf("line[%s] not existed.", name)
+		return nil, nil, errors.New(ErrLineNotExisted)
+	}
+
+	return l.mPop(n)
 }
 
 func (t *topic) confirm(name string, id uint64) error {

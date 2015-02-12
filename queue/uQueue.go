@@ -15,6 +15,7 @@ import (
 
 const (
 	StorageKeyWord     string        = "UnitedQueueKey"
+	ErrBadKey          string        = "Bad Key Format"
 	ErrTopicNotExisted string        = "Topic Not Existed"
 	ErrLineNotExisted  string        = "Line Not Existed"
 	ErrTopicExisted    string        = "Topic Has Existed"
@@ -278,6 +279,17 @@ func (u *UnitedQueue) Push(name string, data []byte) error {
 	return t.push(data)
 }
 
+func (u *UnitedQueue) MultiPush(name string, datas [][]byte) error {
+	u.topicsLock.RLock()
+	t, ok := u.topics[name]
+	u.topicsLock.RUnlock()
+	if !ok {
+		return errors.New(ErrTopicNotExisted)
+	}
+
+	return t.mPush(datas)
+}
+
 func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 2 {
@@ -298,16 +310,84 @@ func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {
 	return t.pop(lName)
 }
 
-func (u *UnitedQueue) Confirm(cr *ConfirmRequest) error {
+func (u *UnitedQueue) MultiPop(name string, n int) ([]uint64, [][]byte, error) {
+	parts := strings.Split(name, "/")
+	if len(parts) != 2 {
+		return nil, nil, errors.New(ErrKey)
+	}
+
+	tName := parts[0]
+	lName := parts[1]
+
 	u.topicsLock.RLock()
-	t, ok := u.topics[cr.TopicName]
+	t, ok := u.topics[tName]
 	u.topicsLock.RUnlock()
 	if !ok {
-		log.Printf("topic[%s] not existed.", cr.TopicName)
+		log.Printf("topic[%s] not existed.", tName)
+		return nil, nil, errors.New(ErrTopicNotExisted)
+	}
+
+	return t.mPop(lName, n)
+}
+
+func (u *UnitedQueue) Confirm(key string) error {
+	var topicName, lineName string
+	var id uint64
+	var err error
+	parts := strings.Split(key, "/")
+	if len(parts) != 3 {
+		return errors.New(ErrBadKey)
+	} else {
+		topicName = parts[0]
+		lineName = parts[1]
+		id, err = strconv.ParseUint(parts[2], 10, 0)
+		if err != nil {
+			return errors.New(ErrBadKey)
+		}
+	}
+
+	u.topicsLock.RLock()
+	t, ok := u.topics[topicName]
+	u.topicsLock.RUnlock()
+	if !ok {
+		log.Printf("topic[%s] not existed.", topicName)
 		return errors.New(ErrTopicNotExisted)
 	}
 
-	return t.confirm(cr.LineName, cr.ID)
+	return t.confirm(lineName, id)
+}
+
+func (u *UnitedQueue) MultiConfirm(keys []string) error {
+	for _, key := range keys {
+		var topicName, lineName string
+		var id uint64
+		var err error
+		parts := strings.Split(key, "/")
+		if len(parts) != 3 {
+			return errors.New(ErrBadKey)
+		} else {
+			topicName = parts[0]
+			lineName = parts[1]
+			id, err = strconv.ParseUint(parts[2], 10, 0)
+			if err != nil {
+				return errors.New(ErrBadKey)
+			}
+		}
+
+		u.topicsLock.RLock()
+		t, ok := u.topics[topicName]
+		u.topicsLock.RUnlock()
+		if !ok {
+			log.Printf("topic[%s] not existed.", topicName)
+			return errors.New(ErrTopicNotExisted)
+		}
+		err = t.confirm(lineName, id)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (u *UnitedQueue) setData(key string, data []byte) error {

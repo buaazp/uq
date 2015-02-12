@@ -15,7 +15,7 @@ type LevelStore struct {
 }
 
 func NewLevelStore(path string) (*LevelStore, error) {
-	option := &opt.Options{Compression: opt.NoCompression}
+	option := &opt.Options{Compression: opt.SnappyCompression}
 	db, err := leveldb.OpenFile(path, option)
 	if err != nil {
 		return nil, err
@@ -28,8 +28,7 @@ func NewLevelStore(path string) (*LevelStore, error) {
 }
 
 func (l *LevelStore) Set(key string, data []byte) error {
-	keyByte := []byte(key)
-	return l.db.Put(keyByte, data, nil)
+	return l.db.Put([]byte(key), data, nil)
 
 	// err := l.db.Put(keyByte, data, nil)
 	// if err != nil {
@@ -40,8 +39,7 @@ func (l *LevelStore) Set(key string, data []byte) error {
 }
 
 func (l *LevelStore) Get(key string) ([]byte, error) {
-	keyByte := []byte(key)
-	return l.db.Get(keyByte, nil)
+	return l.db.Get([]byte(key), nil)
 
 	// data, err := l.db.Get(keyByte, nil)
 	// if err != nil {
@@ -52,8 +50,7 @@ func (l *LevelStore) Get(key string) ([]byte, error) {
 }
 
 func (l *LevelStore) Del(key string) error {
-	keyByte := []byte(key)
-	return l.db.Delete(keyByte, nil)
+	return l.db.Delete([]byte(key), nil)
 
 	// err := l.db.Delete(keyByte, nil)
 	// if err != nil {

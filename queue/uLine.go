@@ -80,8 +80,87 @@ func (l *line) pop() (uint64, []byte, error) {
 	return tid, data, nil
 }
 
+func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
+	l.inflightLock.Lock()
+	defer l.inflightLock.Unlock()
+
+	fc := 0
+	ids := make([]uint64, 0)
+	datas := make([][]byte, 0)
+	if l.recycle > 0 {
+		now := time.Now()
+		for m := l.inflight.Front(); m != nil && fc < n; m = m.Next() {
+			msg := m.Value.(*inflightMessage)
+			if now.After(msg.Exptime) {
+				msg := m.Value.(*inflightMessage)
+				data, err := l.t.getData(msg.Tid)
+				if err != nil {
+					return nil, nil, err
+				}
+				ids = append(ids, msg.Tid)
+				datas = append(datas, data)
+				fc++
+			} else {
+				break
+			}
+		}
+		exptime := now.Add(l.recycle)
+		for i := 0; i < fc; i++ {
+			m := l.inflight.Front()
+			msg := m.Value.(*inflightMessage)
+			msg.Exptime = exptime
+			l.inflight.Remove(m)
+			l.inflight.PushBack(msg)
+		}
+		if fc >= n {
+			return ids, datas, nil
+		}
+	}
+
+	l.headLock.Lock()
+	defer l.headLock.Unlock()
+
+	for ; fc < n; fc++ {
+		topicTail := l.t.getTail()
+		if l.head >= topicTail {
+			// log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
+			break
+		}
+
+		data, err := l.t.getData(l.head)
+		if err != nil {
+			return nil, nil, err
+		}
+		// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
+		ids = append(ids, l.head)
+		datas = append(datas, data)
+
+		if l.recycle > 0 {
+			msg := new(inflightMessage)
+			msg.Tid = l.head
+			msg.Exptime = time.Now().Add(l.recycle)
+
+			l.inflight.PushBack(msg)
+			// log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
+		}
+		l.head++
+	}
+
+	if len(ids) > 0 {
+		return ids, datas, nil
+	}
+	return nil, nil, errors.New(ErrNone)
+}
+
 func (l *line) confirm(id uint64) error {
 	if l.recycle == 0 {
+		return errors.New(ErrNotDelivered)
+	}
+
+	l.headLock.RLock()
+	head := l.head
+	l.headLock.RUnlock()
+	if id >= head {
 		return errors.New(ErrNotDelivered)
 	}
 
@@ -90,14 +169,10 @@ func (l *line) confirm(id uint64) error {
 
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
 		msg := m.Value.(*inflightMessage)
-		if msg.Tid < id {
-			continue
-		} else if msg.Tid == id {
+		if msg.Tid == id {
 			l.inflight.Remove(m)
 			log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
 			return nil
-		} else {
-			break
 		}
 	}
 

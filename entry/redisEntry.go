@@ -115,12 +115,16 @@ func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Repl
 		reply = r.OnQadd(cmd)
 	} else if cmdName == "QPUSH" {
 		reply = r.OnQpush(cmd)
+	} else if cmdName == "QMPUSH" {
+		reply = r.OnQmpush(cmd)
 	} else if cmdName == "QPOP" {
 		reply = r.OnQpop(cmd)
 	} else if cmdName == "QMPOP" {
 		reply = r.OnQmpop(cmd)
 	} else if cmdName == "QDEL" {
 		reply = r.OnQdel(cmd)
+	} else if cmdName == "QMDEL" {
+		reply = r.OnQmdel(cmd)
 	} else {
 		reply = r.OnUndefined(session, cmd)
 	}

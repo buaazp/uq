@@ -10,8 +10,15 @@ import (
 	"strconv"
 
 	"github.com/buaazp/uq/queue"
+	. "github.com/buaazp/uq/utils"
 	"github.com/gorilla/mux"
 )
+
+type ConfirmRequest struct {
+	TopicName string
+	LineName  string
+	ID        uint64
+}
 
 type HttpEntry struct {
 	host         string
@@ -117,15 +124,17 @@ func (h *HttpEntry) confirmHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	cr := new(queue.ConfirmRequest)
+	cr := new(ConfirmRequest)
 	err = json.Unmarshal(data, cr)
 	if err != nil {
 		log.Printf("confirm error: %s", err)
 		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
 		return
 	}
+	// key := cr.TopicName + "/" + cr.LineName
+	key := Acati(cr.TopicName+"/"+cr.LineName, "/", cr.ID)
 
-	err = h.messageQueue.Confirm(cr)
+	err = h.messageQueue.Confirm(key)
 	if err != nil {
 		log.Printf("confirm error: %s", err)
 		http.Error(w, "500 Bad Request!", http.StatusInternalServerError)

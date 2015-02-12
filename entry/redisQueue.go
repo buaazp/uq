@@ -2,7 +2,6 @@ package entry
 
 import (
 	"log"
-	"strconv"
 	"strings"
 	"time"
 
@@ -11,17 +10,16 @@ import (
 )
 
 func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
-	key, _ := cmd.ArgAtIndex(1)
-	val, _ := cmd.ArgAtIndex(2)
+	key := cmd.StringAtIndex(1)
+	arg := cmd.StringAtIndex(2)
 
 	cr := new(queue.CreateRequest)
-	parts := strings.Split(string(key), "/")
+	parts := strings.Split(key, "/")
 	if len(parts) == 2 {
 		cr.TopicName = parts[0]
 		cr.LineName = parts[1]
-		if len(val) > 0 {
-			data := string(val)
-			recycle, err := time.ParseDuration(data)
+		if arg != "" {
+			recycle, err := time.ParseDuration(arg)
 			if err != nil {
 				return ErrorReply(err)
 			}
@@ -41,28 +39,35 @@ func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 }
 
 func (r *RedisEntry) OnQpush(cmd *Command) *Reply {
-	key, _ := cmd.ArgAtIndex(1)
-	val, _ := cmd.ArgAtIndex(2)
-	err := r.messageQueue.Push(string(key), val)
+	key := cmd.StringAtIndex(1)
+	val, err := cmd.ArgAtIndex(2)
+	if err != nil {
+		return ErrorReply(err)
+	}
+
+	err = r.messageQueue.Push(key, val)
 	if err != nil {
 		return ErrorReply(err)
 	}
 	return StatusReply("OK")
 }
 
-func (r *RedisEntry) OnQpop(cmd *Command) *Reply {
-	key, _ := cmd.ArgAtIndex(1)
-	_, value, err := r.messageQueue.Pop(string(key))
+func (r *RedisEntry) OnQmpush(cmd *Command) *Reply {
+	key := cmd.StringAtIndex(1)
+	vals := cmd.Args()[2:]
+
+	err := r.messageQueue.MultiPush(key, vals)
 	if err != nil {
 		return ErrorReply(err)
 	}
-	return BulkReply(value)
+
+	return StatusReply("OK")
 }
 
-func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
-	key, _ := cmd.ArgAtIndex(1)
+func (r *RedisEntry) OnQpop(cmd *Command) *Reply {
+	key := cmd.StringAtIndex(1)
 
-	id, value, err := r.messageQueue.Pop(string(key))
+	id, value, err := r.messageQueue.Pop(key)
 	if err != nil {
 		return ErrorReply(err)
 	}
@@ -70,30 +75,58 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 	vals := make([]interface{}, 2)
 	vals[0] = value
 
-	confirmId := Acati(string(key), "/", id)
+	confirmId := Acati(key, "/", id)
 	vals[1] = confirmId
 
 	return MultiBulksReply(vals)
 }
 
-func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
-	key, _ := cmd.ArgAtIndex(1)
-
-	cr := new(queue.ConfirmRequest)
-	parts := strings.Split(string(key), "/")
-	if len(parts) != 3 {
-		return ErrorReply(ERR_C_FORMAT)
-	} else {
-		cr.TopicName = parts[0]
-		cr.LineName = parts[1]
-		id, err := strconv.ParseUint(parts[2], 10, 0)
-		if err != nil {
-			return ErrorReply(ERR_C_FORMAT)
-		}
-		cr.ID = id
+func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
+	key := cmd.StringAtIndex(1)
+	n, err := cmd.IntAtIndex(2)
+	if err != nil {
+		return ErrorReply(err)
 	}
 
-	err := r.messageQueue.Confirm(cr)
+	ids, values, err := r.messageQueue.MultiPop(key, n)
+	if err != nil {
+		return ErrorReply(err)
+	}
+
+	vals := make([]interface{}, len(ids)*2)
+	index := 0
+	for i := 0; i < len(ids); i++ {
+		vals[index] = values[i]
+		index++
+
+		confirmId := Acati(key, "/", ids[i])
+		vals[index] = confirmId
+		index++
+	}
+
+	return MultiBulksReply(vals)
+}
+
+func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
+	key := cmd.StringAtIndex(1)
+
+	err := r.messageQueue.Confirm(key)
+	if err != nil {
+		log.Printf("confirm error: %s", err)
+		return ErrorReply(err)
+	}
+
+	return StatusReply("DELETE OK")
+}
+
+func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
+	keys := make([]string, cmd.Len()-1)
+	for i := 0; i < cmd.Len()-1; i++ {
+		keys[i] = cmd.StringAtIndex(i + 1)
+	}
+	log.Printf("keys: %v len: %d", keys, len(keys))
+
+	err := r.messageQueue.MultiConfirm(keys)
 	if err != nil {
 		log.Printf("confirm error: %s", err)
 		return ErrorReply(err)
