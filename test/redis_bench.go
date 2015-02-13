@@ -102,49 +102,20 @@ func getTestSingle(ch chan bool, cn, n int) error {
 	key := topicName + "/" + lineName
 	for i := 0; i < n; i++ {
 		start := time.Now()
-		reply, err := conn.Do("QMPOP", key)
-		if err != nil {
-			log.Printf("get error: c%d %v", cn, err)
-		} else {
-			v, err := redis.Strings(reply, err)
-			if err != nil {
-				fmt.Printf("redis.strings error: c%d %v\n", cn, err)
-				return err
-			}
-			// fmt.Printf("redis.strings %v\n", v)
-			end := time.Now()
-			duration := end.Sub(start).Seconds()
-			log.Printf("get succ: %s spend: %.3fms", v[1], duration*1000)
-		}
-	}
-	ch <- true
-	return nil
-}
-
-func getTestSingle2(ch chan bool, cn, n int) error {
-	addr := fmt.Sprintf("%s:%d", host, port)
-	conn, err := redis.DialTimeout("tcp", addr, 0, 1*time.Second, 1*time.Second)
-	if err != nil {
-		log.Printf("redis conn error: %s", err)
-		return err
-	}
-	defer conn.Close()
-	key := topicName + "/" + lineName
-	for i := 0; i < n; i++ {
-		start := time.Now()
 		reply, err := conn.Do("QPOP", key)
 		if err != nil {
 			log.Printf("get error: c%d %v", cn, err)
 		} else {
-			_, err := redis.String(reply, err)
+			rpl, err := redis.Values(reply, err)
 			if err != nil {
-				fmt.Printf("redis.string error: c%d %v\n", cn, err)
+				fmt.Printf("redis.values error: c%d %v\n", cn, err)
 				return err
 			}
 			// fmt.Printf("redis.strings %v\n", v)
 			end := time.Now()
 			duration := end.Sub(start).Seconds()
-			log.Printf("get succ: %s spend: %.3fms", key, duration*1000)
+			id := uint64(rpl[1].(int64))
+			log.Printf("get succ: %d spend: %.3fms", id, duration*1000)
 		}
 	}
 	ch <- true
@@ -155,7 +126,7 @@ func getTest(c, n int) {
 	ch := make(chan bool)
 	singleCount := n / c
 	for i := 0; i < c; i++ {
-		go getTestSingle2(ch, i, singleCount)
+		go getTestSingle(ch, i, singleCount)
 	}
 	for i := 0; i < c; i++ {
 		select {
