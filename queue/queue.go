@@ -15,6 +15,6 @@ type MessageQueue interface {
 	Pop(name string) (uint64, []byte, error)
 	MultiPop(name string, n int) ([]uint64, [][]byte, error)
 	Confirm(key string) error
-	MultiConfirm(keys []string) error
+	MultiConfirm(name string, ids []uint64) (int, error)
 	Close()
 }

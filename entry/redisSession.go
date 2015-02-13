@@ -291,6 +291,10 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 			buf.WriteString(":")
 			buf.WriteString(itoa(bulk.(int)))
 			buf.WriteString(CRLF)
+		case uint64:
+			buf.WriteString(":")
+			buf.WriteString(strconv.FormatUint(bulk.(uint64), 10))
+			buf.WriteString(CRLF)
 		default:
 			// nil element
 			buf.WriteString("$-1")

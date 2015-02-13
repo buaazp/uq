@@ -236,6 +236,18 @@ func (t *topic) confirm(name string, id uint64) error {
 	return l.confirm(id)
 }
 
+func (t *topic) mConfirm(name string, ids []uint64) (int, error) {
+	t.linesLock.RLock()
+	l, ok := t.lines[name]
+	t.linesLock.RUnlock()
+	if !ok {
+		log.Printf("line[%s] not existed.", name)
+		return 0, errors.New(ErrLineNotExisted)
+	}
+
+	return l.mConfirm(ids)
+}
+
 func (t *topic) getData(id uint64) ([]byte, error) {
 	key := utils.Acati(t.name, ":", id)
 	return t.q.getData(key)

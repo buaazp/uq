@@ -53,18 +53,29 @@ func (cmd *Command) ArgAtIndex(i int) (arg []byte, err error) {
 }
 
 func (cmd *Command) IntAtIndex(i int) (n int, err error) {
-	var f float64
-	if f, err = cmd.FloatAtIndex(i); err == nil {
-		n = int(f)
+	if i >= cmd.Len() {
+		err = errors.New(fmt.Sprintf("out of range %d/%d", i, cmd.Len()))
+		return
 	}
+	n, err = strconv.Atoi(string(cmd.args[i]))
 	return
 }
 
 func (cmd *Command) Int64AtIndex(i int) (n int64, err error) {
-	var f float64
-	if f, err = cmd.FloatAtIndex(i); err == nil {
-		n = int64(f)
+	if i >= cmd.Len() {
+		err = errors.New(fmt.Sprintf("out of range %d/%d", i, cmd.Len()))
+		return
 	}
+	n, err = strconv.ParseInt(string(cmd.args[i]), 10, 0)
+	return
+}
+
+func (cmd *Command) Uint64AtIndex(i int) (n uint64, err error) {
+	if i >= cmd.Len() {
+		err = errors.New(fmt.Sprintf("out of range %d/%d", i, cmd.Len()))
+		return
+	}
+	n, err = strconv.ParseUint(string(cmd.args[i]), 10, 0)
 	return
 }
 

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/buaazp/uq/queue"
-	. "github.com/buaazp/uq/utils"
 )
 
 func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
@@ -28,7 +27,7 @@ func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 	} else if len(parts) == 1 {
 		cr.TopicName = parts[0]
 	} else {
-		return ErrorReply("CLIENT_ERROR client format")
+		return ErrorReply("ERR bad key format '" + key + "'")
 	}
 
 	err := r.messageQueue.Create(cr)
@@ -74,9 +73,7 @@ func (r *RedisEntry) OnQpop(cmd *Command) *Reply {
 
 	vals := make([]interface{}, 2)
 	vals[0] = value
-
-	confirmId := Acati(key, "/", id)
-	vals[1] = confirmId
+	vals[1] = id
 
 	return MultiBulksReply(vals)
 }
@@ -93,14 +90,14 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 		return ErrorReply(err)
 	}
 
-	vals := make([]interface{}, len(ids)*2)
-	index := 0
-	for i := 0; i < len(ids); i++ {
+	np := len(ids)
+
+	vals := make([]interface{}, np*2)
+	for i, index := 0, 0; i < np; i++ {
 		vals[index] = values[i]
 		index++
 
-		confirmId := Acati(key, "/", ids[i])
-		vals[index] = confirmId
+		vals[index] = ids[i]
 		index++
 	}
 
@@ -116,21 +113,26 @@ func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
 		return ErrorReply(err)
 	}
 
-	return StatusReply("DELETE OK")
+	return StatusReply("OK")
 }
 
 func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
-	keys := make([]string, cmd.Len()-1)
-	for i := 0; i < cmd.Len()-1; i++ {
-		keys[i] = cmd.StringAtIndex(i + 1)
+	var err error
+	key := cmd.StringAtIndex(1)
+	ids := make([]uint64, cmd.Len()-2)
+	for i := 2; i < cmd.Len(); i++ {
+		ids[i-2], err = cmd.Uint64AtIndex(i)
+		if err != nil {
+			return ErrorReply(err)
+		}
 	}
-	log.Printf("keys: %v len: %d", keys, len(keys))
+	log.Printf("key: %s ids: %v", key, ids)
 
-	err := r.messageQueue.MultiConfirm(keys)
+	n, err := r.messageQueue.MultiConfirm(key, ids)
 	if err != nil {
 		log.Printf("confirm error: %s", err)
 		return ErrorReply(err)
 	}
 
-	return StatusReply("DELETE OK")
+	return IntegerReply(n)
 }

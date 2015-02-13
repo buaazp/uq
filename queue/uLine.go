@@ -179,6 +179,41 @@ func (l *line) confirm(id uint64) error {
 	return errors.New(ErrNotDelivered)
 }
 
+func (l *line) mConfirm(ids []uint64) (int, error) {
+	if l.recycle == 0 {
+		return 0, errors.New(ErrNotDelivered)
+	}
+
+	l.headLock.RLock()
+	head := l.head
+	l.headLock.RUnlock()
+
+	l.inflightLock.Lock()
+	defer l.inflightLock.Unlock()
+
+	var confirmed int = 0
+	for _, id := range ids {
+		if id >= head {
+			log.Printf("ID[%d] is Not Delivered", id)
+			continue
+		}
+
+		for m := l.inflight.Front(); m != nil; m = m.Next() {
+			msg := m.Value.(*inflightMessage)
+			if msg.Tid == id {
+				l.inflight.Remove(m)
+				log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
+				confirmed++
+			}
+		}
+	}
+
+	if confirmed == 0 {
+		return 0, errors.New(ErrNotDelivered)
+	}
+	return confirmed, nil
+}
+
 func (l *line) exportLine() error {
 	log.Printf("start export line[%s]...", l.name)
 

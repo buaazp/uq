@@ -357,37 +357,25 @@ func (u *UnitedQueue) Confirm(key string) error {
 	return t.confirm(lineName, id)
 }
 
-func (u *UnitedQueue) MultiConfirm(keys []string) error {
-	for _, key := range keys {
-		var topicName, lineName string
-		var id uint64
-		var err error
-		parts := strings.Split(key, "/")
-		if len(parts) != 3 {
-			return errors.New(ErrBadKey)
-		} else {
-			topicName = parts[0]
-			lineName = parts[1]
-			id, err = strconv.ParseUint(parts[2], 10, 0)
-			if err != nil {
-				return errors.New(ErrBadKey)
-			}
-		}
-
-		u.topicsLock.RLock()
-		t, ok := u.topics[topicName]
-		u.topicsLock.RUnlock()
-		if !ok {
-			log.Printf("topic[%s] not existed.", topicName)
-			return errors.New(ErrTopicNotExisted)
-		}
-		err = t.confirm(lineName, id)
-		if err != nil {
-			return err
-		}
+func (u *UnitedQueue) MultiConfirm(name string, ids []uint64) (int, error) {
+	var topicName, lineName string
+	parts := strings.Split(name, "/")
+	if len(parts) != 2 {
+		return 0, errors.New(ErrBadKey)
+	} else {
+		topicName = parts[0]
+		lineName = parts[1]
 	}
 
-	return nil
+	u.topicsLock.RLock()
+	t, ok := u.topics[topicName]
+	u.topicsLock.RUnlock()
+	if !ok {
+		log.Printf("topic[%s] not existed.", topicName)
+		return 0, errors.New(ErrTopicNotExisted)
+	}
+
+	return t.mConfirm(lineName, ids)
 }
 
 func (u *UnitedQueue) setData(key string, data []byte) error {
