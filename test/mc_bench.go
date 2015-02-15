@@ -12,14 +12,16 @@ import (
 )
 
 var host, method, topicName, lineName string
-var port, testCount, concurrency int
+var port, testCount, concurrency, dataSize, bucket int
 
 func init() {
 	flag.StringVar(&host, "h", "127.0.0.1", "hostname")
 	flag.IntVar(&port, "p", 11211, "port")
 	flag.IntVar(&concurrency, "c", 10, "concurrency level")
 	flag.IntVar(&testCount, "n", 10000, "test count")
+	flag.IntVar(&dataSize, "d", 200, "data size")
 	flag.StringVar(&method, "m", "push", "test method")
+	flag.IntVar(&bucket, "b", 50, "bucket size when mpush")
 	flag.StringVar(&topicName, "t", "StressTestTool", "topic to test")
 	flag.StringVar(&lineName, "l", "Line", "line to test")
 	flag.Usage = func() {
@@ -49,7 +51,7 @@ func setTestSingle(ch chan bool, cn, n int) {
 	var err error
 	var mc *memcache.Client
 	conn := fmt.Sprintf("%s:%d", host, port)
-	v := make([]byte, 200)
+	v := make([]byte, dataSize)
 	mc = memcache.New(conn)
 	for i := 0; i < n; i++ {
 		start := time.Now()
@@ -128,7 +130,7 @@ func main() {
 	hour := now.Hour()
 	minute := now.Minute()
 	second := now.Second()
-	logName := fmt.Sprintf("uq_%s_%d-%d-%d_%d:%d:%d_c%d_n%d.log", method, year, month, day, hour, minute, second, concurrency, testCount)
+	logName := fmt.Sprintf("uq_mc_%s_%d-%d-%d_%d:%d:%d_c%d_n%d.log", method, year, month, day, hour, minute, second, concurrency, testCount)
 	logfile, err := os.OpenFile(logName, os.O_RDWR|os.O_CREATE, 0666)
 	if err != nil {
 		fmt.Printf("%s\r\n", err.Error())
@@ -152,10 +154,10 @@ func main() {
 	duration := end.Sub(start)
 	dSecond := duration.Seconds()
 
-	fmt.Printf("StressTest Done!")
-	fmt.Printf("Spend: %.3fs Speed: %.3f msg/s", dSecond, float64(testCount)/dSecond)
+	fmt.Printf("StressTest Done! ")
+	fmt.Printf("Spend: %.3fs Speed: %.3f msg/s Throughput: %.3f MB/s", dSecond, float64(testCount)/dSecond, float64(testCount*dataSize)/(1024*1024*dSecond))
 
 	log.Printf("StressTest Done!")
-	log.Printf("Spend: %.3fs Speed: %.3f msg/s", dSecond, float64(testCount)/dSecond)
+	log.Printf("Spend: %.3fs Speed: %.3f msg/s Throughput: %.3f MB/s", dSecond, float64(testCount)/dSecond, float64(testCount*dataSize)/(1024*1024*dSecond))
 	return
 }

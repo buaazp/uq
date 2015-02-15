@@ -12,14 +12,16 @@ import (
 )
 
 var host, method, topicName, lineName string
-var port, testCount, concurrency int
+var port, testCount, concurrency, dataSize, bucket int
 
 func init() {
 	flag.StringVar(&host, "h", "127.0.0.1", "hostname")
 	flag.IntVar(&port, "p", 11211, "port")
 	flag.IntVar(&concurrency, "c", 10, "concurrency level")
 	flag.IntVar(&testCount, "n", 10000, "test count")
+	flag.IntVar(&dataSize, "d", 200, "data size")
 	flag.StringVar(&method, "m", "push", "test method")
+	flag.IntVar(&bucket, "b", 50, "bucket size when mpush")
 	flag.StringVar(&topicName, "t", "StressTestTool", "topic to test")
 	flag.StringVar(&lineName, "l", "Line", "line to test")
 	flag.Usage = func() {
@@ -61,7 +63,7 @@ func setTestSingle(ch chan bool, cn, n int) error {
 		return err
 	}
 	defer conn.Close()
-	v := make([]byte, 200)
+	v := make([]byte, dataSize)
 	for i := 0; i < n; i++ {
 		start := time.Now()
 		_, err = conn.Do("QPUSH", topicName, v)
@@ -82,6 +84,51 @@ func setTest(c, n int) {
 	singleCount := n / c
 	for i := 0; i < c; i++ {
 		go setTestSingle(ch, i, singleCount)
+	}
+	for i := 0; i < c; i++ {
+		select {
+		case <-ch:
+			log.Printf("set single succ: %s - c%d", topicName, i)
+		}
+	}
+}
+
+func msetTestSingle(ch chan bool, cn, n int) error {
+	var err error
+	addr := fmt.Sprintf("%s:%d", host, port)
+	conn, err := redis.DialTimeout("tcp", addr, 0, 1*time.Second, 1*time.Second)
+	if err != nil {
+		log.Printf("redis conn error: %s", err)
+		return err
+	}
+	defer conn.Close()
+	v := make([]byte, dataSize)
+	b := make([]interface{}, bucket+1)
+	b[0] = topicName
+	for i := 1; i < bucket+1; i++ {
+		b[i] = v
+	}
+	count := n / bucket
+	for i := 0; i < count; i++ {
+		start := time.Now()
+		_, err = conn.Do("QMPUSH", b...)
+		if err != nil {
+			log.Printf("set error: c%d %v", cn, err)
+		} else {
+			end := time.Now()
+			duration := end.Sub(start).Seconds()
+			log.Printf("set succ: %s spend: %.3fms", topicName, duration*1000)
+		}
+	}
+	ch <- true
+	return nil
+}
+
+func msetTest(c, n int) {
+	ch := make(chan bool)
+	singleCount := n / c
+	for i := 0; i < c; i++ {
+		go msetTestSingle(ch, i, singleCount)
 	}
 	for i := 0; i < c; i++ {
 		select {
@@ -140,7 +187,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	flag.Parse()
 
-	if method != "push" && method != "pop" {
+	if method != "mpush" && method != "push" && method != "pop" {
 		fmt.Printf("test method not supported!\n")
 		return
 	}
@@ -172,6 +219,8 @@ func main() {
 	start := time.Now()
 	if method == "push" {
 		setTest(concurrency, testCount)
+	} else if method == "mpush" {
+		msetTest(concurrency, testCount)
 	} else if method == "pop" {
 		getTest(concurrency, testCount)
 	}
@@ -180,10 +229,10 @@ func main() {
 	duration := end.Sub(start)
 	dSecond := duration.Seconds()
 
-	fmt.Printf("StressTest Done!")
-	fmt.Printf("Spend: %.3fs Speed: %.3f msg/s", dSecond, float64(testCount)/dSecond)
+	fmt.Printf("StressTest Done! ")
+	fmt.Printf("Spend: %.3fs Speed: %.3f msg/s Throughput: %.3f MB/s", dSecond, float64(testCount)/dSecond, float64(testCount*dataSize)/(1024*1024*dSecond))
 
 	log.Printf("StressTest Done!")
-	log.Printf("Spend: %.3fs Speed: %.3f msg/s", dSecond, float64(testCount)/dSecond)
+	log.Printf("Spend: %.3fs Speed: %.3f msg/s Throughput: %.3f MB/s", dSecond, float64(testCount)/dSecond, float64(testCount*dataSize)/(1024*1024*dSecond))
 	return
 }

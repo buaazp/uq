@@ -36,6 +36,14 @@ func (cmd *Command) Args() [][]byte {
 	return cmd.args
 }
 
+func (cmd *Command) StringArgs() []string {
+	strings := make([]string, len(cmd.args))
+	for i, arg := range cmd.args {
+		strings[i] = string(arg)
+	}
+	return strings
+}
+
 func (cmd *Command) StringAtIndex(i int) string {
 	if i >= cmd.Len() {
 		return ""
