@@ -7,4 +7,5 @@ test/mc_bench
 test/redis_bench
 test/testAcati
 *.log
+*.out
 
