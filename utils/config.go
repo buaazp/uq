@@ -19,6 +19,9 @@ func SetPort(port int) {
 }
 
 func SetEtcdServer(etcdServer string) {
+	if etcdServer == "" {
+		return
+	}
 	etcdServers := strings.Split(etcdServer, ",")
 	UqConfig.EtcdServer = etcdServers
 }

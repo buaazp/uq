@@ -36,7 +36,7 @@ func init() {
 	flag.StringVar(&front, "f", "mc", "frontend interface")
 	flag.StringVar(&backend, "b", "leveldb", "store backend")
 	flag.StringVar(&storePath, "d", "./data/uq.db", "store path")
-	flag.StringVar(&etcdServer, "etcd", "http://127.0.0.1:4001", "etcd service location")
+	flag.StringVar(&etcdServer, "etcd", "", "etcd service location")
 }
 
 func main() {

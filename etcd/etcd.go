@@ -11,6 +11,10 @@ import (
 
 func RegisterUq() error {
 	// log.Printf("etcdServers: %v", UqConfig.EtcdServer)
+	if len(UqConfig.EtcdServer) == 0{
+		return nil
+	}
+
 	client := etcd.NewClient(UqConfig.EtcdServer)
 	resp, err := client.CreateDir(EtcdUqServerListKey, 0)
 	if err != nil && strings.HasPrefix(err.Error(), "105") != true {
@@ -37,6 +41,10 @@ func RegisterUq() error {
 }
 
 func RegisterTopic(topic string) error {
+	if len(UqConfig.EtcdServer) == 0{
+		return nil
+	}
+
 	client := etcd.NewClient(UqConfig.EtcdServer)
 	resp, err := client.CreateDir(topic, 0)
 	if err != nil && strings.HasPrefix(err.Error(), "105") != true {
