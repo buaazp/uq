@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/buaazp/uq/etcd"
 	"github.com/buaazp/uq/store"
 )
 
@@ -143,6 +144,11 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	}
 	t.lines = lines
 
+	err = etcd.RegisterTopic(t.name)
+	if err != nil {
+		return nil, err
+	}
+
 	t.start()
 	log.Printf("topic[%s] load succ.", topicName)
 	log.Printf("topic: %v", t)
@@ -224,6 +230,12 @@ func (u *UnitedQueue) newTopic(name string) (*topic, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	err = etcd.RegisterTopic(t.name)
+	if err != nil {
+		return nil, err
+	}
+
 	t.start()
 	return t, nil
 }
