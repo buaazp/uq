@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/buaazp/uq/etcd"
 	"github.com/buaazp/uq/store"
+	"github.com/coreos/go-etcd/etcd"
 )
 
 const (
@@ -39,20 +40,38 @@ type UnitedQueue struct {
 	topics     map[string]*topic
 	topicsLock sync.RWMutex
 	storage    store.Storage
+	etcdLock   sync.RWMutex
+	selfAddr   string
+	etcdClient *etcd.Client
+	etcdStop   chan bool
 }
 
 type unitedQueueStore struct {
 	Topics []string
 }
 
-func NewUnitedQueue(storage store.Storage) (*UnitedQueue, error) {
+func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []string) (*UnitedQueue, error) {
 	topics := make(map[string]*topic)
+	selfAddr := fmt.Sprintf("%s:%d", ip, port)
+	etcdStop := make(chan bool)
 	uq := new(UnitedQueue)
 	uq.topics = topics
 	uq.storage = storage
+	uq.selfAddr = selfAddr
+	if len(etcdServers) > 0 {
+		etcdClient := etcd.NewClient(etcdServers)
+		uq.etcdClient = etcdClient
+		go uq.etcdRun()
+	}
+	uq.etcdStop = etcdStop
 
 	err := uq.loadQueue()
 	if err != nil {
+		return nil, err
+	}
+	err = uq.RegisterSelf()
+	if err != nil {
+		log.Printf("etcd register self error: %s", err)
 		return nil, err
 	}
 	return uq, nil
@@ -87,6 +106,12 @@ func (u *UnitedQueue) loadQueue() error {
 				}
 			}
 		}
+	}
+
+	err = u.RegisterTopics()
+	if err != nil {
+		log.Printf("etcd register topics error: %s", err)
+		return err
 	}
 
 	log.Printf("united queue load finisded.")
@@ -144,7 +169,7 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	}
 	t.lines = lines
 
-	err = etcd.RegisterTopic(t.name)
+	err = u.RegisterTopic(t.name)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +256,7 @@ func (u *UnitedQueue) newTopic(name string) (*topic, error) {
 		return nil, err
 	}
 
-	err = etcd.RegisterTopic(t.name)
+	err = u.RegisterTopic(t.name)
 	if err != nil {
 		return nil, err
 	}
@@ -423,6 +448,8 @@ func (u *UnitedQueue) delData(key string) error {
 
 func (u *UnitedQueue) Close() {
 	log.Printf("uq stoping...")
+	close(u.etcdStop)
+
 	for _, t := range u.topics {
 		close(t.quit)
 	}
