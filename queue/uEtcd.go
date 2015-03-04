@@ -13,17 +13,16 @@ const (
 )
 
 func (u *UnitedQueue) etcdRun() {
-	//TODO: time duration
 	ticker := time.NewTicker(time.Duration(EtcdTTL * OneSecond))
 	quit := false
 	for !quit {
 		select {
 		case <-ticker.C:
-			err := u.RegisterSelf()
+			err := u.registerSelf()
 			if err != nil {
 				log.Printf("etcd register self error: %s", err)
 			}
-			err = u.RegisterTopics()
+			err = u.registerTopics()
 			if err != nil {
 				log.Printf("etcd register topics error: %s", err)
 			}
@@ -33,18 +32,18 @@ func (u *UnitedQueue) etcdRun() {
 			break
 		}
 	}
-	err := u.UnRegisterSelf()
+	err := u.unRegisterSelf()
 	if err != nil {
 		log.Printf("etcd unregister self error: %s", err)
 	}
-	err = u.UnRegisterTopics()
+	err = u.unRegisterTopics()
 	if err != nil {
 		log.Printf("etcd unregister topics error: %s", err)
 	}
 	log.Printf("etcdRun stoped.")
 }
 
-func (u *UnitedQueue) RegisterSelf() error {
+func (u *UnitedQueue) registerSelf() error {
 	// log.Printf("etcdServers: %v", UqConfig.EtcdServer)
 	if u.etcdClient == nil {
 		return nil
@@ -72,7 +71,7 @@ func (u *UnitedQueue) RegisterSelf() error {
 	return nil
 }
 
-func (u *UnitedQueue) UnRegisterSelf() error {
+func (u *UnitedQueue) unRegisterSelf() error {
 	// log.Printf("etcdServers: %v", UqConfig.EtcdServer)
 	if u.etcdClient == nil {
 		return nil
@@ -90,7 +89,7 @@ func (u *UnitedQueue) UnRegisterSelf() error {
 	return nil
 }
 
-func (u *UnitedQueue) RegisterTopic(topic string) error {
+func (u *UnitedQueue) registerTopic(topic string) error {
 	if u.etcdClient == nil {
 		return nil
 	}
@@ -117,7 +116,7 @@ func (u *UnitedQueue) RegisterTopic(topic string) error {
 	return nil
 }
 
-func (u *UnitedQueue) UnRegisterTopic(topic string) error {
+func (u *UnitedQueue) unRegisterTopic(topic string) error {
 	if u.etcdClient == nil {
 		return nil
 	}
@@ -134,7 +133,7 @@ func (u *UnitedQueue) UnRegisterTopic(topic string) error {
 	return nil
 }
 
-func (u *UnitedQueue) RegisterTopics() error {
+func (u *UnitedQueue) registerTopics() error {
 	if u.etcdClient == nil {
 		return nil
 	}
@@ -165,7 +164,7 @@ func (u *UnitedQueue) RegisterTopics() error {
 	return nil
 }
 
-func (u *UnitedQueue) UnRegisterTopics() error {
+func (u *UnitedQueue) unRegisterTopics() error {
 	if u.etcdClient == nil {
 		return nil
 	}

@@ -69,7 +69,7 @@ func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []st
 	if err != nil {
 		return nil, err
 	}
-	err = uq.RegisterSelf()
+	err = uq.registerSelf()
 	if err != nil {
 		log.Printf("etcd register self error: %s", err)
 		return nil, err
@@ -108,7 +108,7 @@ func (u *UnitedQueue) loadQueue() error {
 		}
 	}
 
-	err = u.RegisterTopics()
+	err = u.registerTopics()
 	if err != nil {
 		log.Printf("etcd register topics error: %s", err)
 		return err
@@ -169,7 +169,7 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	}
 	t.lines = lines
 
-	err = u.RegisterTopic(t.name)
+	err = u.registerTopic(t.name)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +256,7 @@ func (u *UnitedQueue) newTopic(name string) (*topic, error) {
 		return nil, err
 	}
 
-	err = u.RegisterTopic(t.name)
+	err = u.registerTopic(t.name)
 	if err != nil {
 		return nil, err
 	}
