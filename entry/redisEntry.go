@@ -45,6 +45,7 @@ func (r *RedisEntry) ListenAndServe() error {
 	}
 	r.stopListener = stopListener
 
+	log.Printf("redis entrance serving at %s...", addr)
 	for {
 		conn, err := r.stopListener.Accept()
 		if err != nil {

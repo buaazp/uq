@@ -72,8 +72,8 @@ func (r *RedisEntry) OnQpop(cmd *Command) *Reply {
 	}
 
 	vals := make([]interface{}, 2)
-	vals[0] = value
-	vals[1] = id
+	vals[0] = id
+	vals[1] = value
 
 	return MultiBulksReply(vals)
 }
@@ -94,10 +94,10 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 
 	vals := make([]interface{}, np*2)
 	for i, index := 0, 0; i < np; i++ {
-		vals[index] = values[i]
+		vals[index] = ids[i]
 		index++
 
-		vals[index] = ids[i]
+		vals[index] = values[i]
 		index++
 	}
 

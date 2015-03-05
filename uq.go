@@ -11,7 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
+	"time"
 
 	"github.com/buaazp/uq/entry"
 	"github.com/buaazp/uq/queue"
@@ -83,25 +83,45 @@ func main() {
 	}
 
 	stop := make(chan os.Signal)
-	signal.Notify(stop, syscall.SIGINT)
+	failed := make(chan bool)
+	// signal.Notify(stop, syscall.SIGINT, os.Interrupt, os.Kill)
+	signal.Notify(stop)
 	var wg sync.WaitGroup
-	go func() {
+	go func(c chan bool) {
 		wg.Add(1)
 		defer wg.Done()
-		entrance.ListenAndServe()
-	}()
+		err := entrance.ListenAndServe()
+		if err != nil {
+			if !strings.Contains(err.Error(), "stopped") {
+				fmt.Printf("entry listen error: %s\n", err)
+			}
+			close(c)
+		}
+	}(failed)
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:8080", nil))
-	}()
+	go func(c chan bool) {
+		wg.Add(1)
+		defer wg.Done()
 
-	log.Printf("entrance serving...")
+		tick := time.NewTicker(3 * time.Second)
+		select {
+		case <-c:
+			log.Printf("quit, don't start profile.")
+			return
+		case <-tick.C:
+			log.Println(http.ListenAndServe("localhost:8080", nil))
+		}
+	}(failed)
+
 	select {
 	case signal := <-stop:
-		log.Printf("got signal:%v", signal)
+		log.Printf("got signal: %v", signal)
+		log.Printf("entrance stoping...")
+		entrance.Stop()
+	case <-failed:
+		log.Printf("messageQueue stoping...")
+		messageQueue.Close()
 	}
-	log.Printf("entrance stoping...")
-	entrance.Stop()
 	wg.Wait()
 	fmt.Printf("byebye! uq see u later! 😄\n")
 }

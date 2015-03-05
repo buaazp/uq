@@ -26,6 +26,7 @@ type topic struct {
 	q         *UnitedQueue
 
 	quit chan bool
+	wg   sync.WaitGroup
 }
 
 type topicStore struct {
@@ -254,24 +255,26 @@ func (t *topic) getData(id uint64) ([]byte, error) {
 }
 
 func (t *topic) backgroundClean() {
-	defer func() {
-		log.Printf("background clean exit.")
-	}()
+	t.wg.Add(1)
+	defer t.wg.Done()
 
+	bgQuit := false
 	cleanTick := time.NewTicker(BgCleanInterval)
-	for {
+	for !bgQuit {
 		select {
 		case <-cleanTick.C:
-			quit := t.clean()
-			if quit {
-				log.Printf("t.clean return quit: %v", quit)
-				return
+			bgQuit := t.clean()
+			if bgQuit {
+				log.Printf("t.clean return quit: %v", bgQuit)
+				break
 			}
 		case <-t.quit:
 			log.Printf("background clean catched quit")
-			return
+			bgQuit = true
+			break
 		}
 	}
+	log.Printf("background clean exit.")
 }
 
 func (t *topic) clean() (quit bool) {
@@ -389,4 +392,9 @@ func (t *topic) exportLines() error {
 
 	log.Printf("topic[%s]'s all lines exported.", t.name)
 	return nil
+}
+
+func (t *topic) close() {
+	close(t.quit)
+	t.wg.Wait()
 }

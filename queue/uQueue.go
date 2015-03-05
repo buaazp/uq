@@ -44,6 +44,7 @@ type UnitedQueue struct {
 	selfAddr   string
 	etcdClient *etcd.Client
 	etcdStop   chan bool
+	etcdwg     sync.WaitGroup
 }
 
 type unitedQueueStore struct {
@@ -69,11 +70,12 @@ func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []st
 	if err != nil {
 		return nil, err
 	}
-	err = uq.registerSelf()
-	if err != nil {
-		log.Printf("etcd register self error: %s", err)
-		return nil, err
-	}
+	// don't regiser self here because entry maybe start failed:
+	// err = uq.registerSelf()
+	// if err != nil {
+	// 	log.Printf("etcd register self error: %s", err)
+	// 	return nil, err
+	// }
 	return uq, nil
 }
 
@@ -449,9 +451,10 @@ func (u *UnitedQueue) delData(key string) error {
 func (u *UnitedQueue) Close() {
 	log.Printf("uq stoping...")
 	close(u.etcdStop)
+	u.etcdwg.Wait()
 
 	for _, t := range u.topics {
-		close(t.quit)
+		t.close()
 	}
 
 	err := u.exportTopics()

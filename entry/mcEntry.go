@@ -53,7 +53,7 @@ func (m *McEntry) ListenAndServe() error {
 	}
 	m.stopListener = stopListener
 
-	log.Print("start serving at ", addr, "...\n")
+	log.Printf("mc entrance serving at %s...", addr)
 	for {
 		conn, e := m.stopListener.Accept()
 		if e != nil {

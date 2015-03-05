@@ -1,5 +1,8 @@
 .DS_Store
 data/
+data1/
+data2/
+data3/
 uq
 test/bench_reader
 test/bench_writer

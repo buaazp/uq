@@ -8,11 +8,14 @@ import (
 const (
 	EtcdUqServerListKey   string = "UQLIST"
 	EtcdUqServerListValue string = "online"
-	EtcdTTL               uint64 = 10
+	EtcdTTL               uint64 = 30
 	OneSecond             uint64 = uint64(time.Second)
 )
 
 func (u *UnitedQueue) etcdRun() {
+	u.etcdwg.Add(1)
+	defer u.etcdwg.Done()
+
 	ticker := time.NewTicker(time.Duration(EtcdTTL * OneSecond))
 	quit := false
 	for !quit {

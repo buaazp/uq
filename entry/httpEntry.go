@@ -144,19 +144,20 @@ func (h *HttpEntry) confirmHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *HttpEntry) ListenAndServe() error {
-	ln, err := net.Listen("tcp", h.server.Addr)
+	addr := fmt.Sprintf("%s:%d", h.host, h.port)
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
-	stopListener, err := NewStopListener(ln)
+	stopListener, err := NewStopListener(l)
 	if err != nil {
 		return err
 	}
 	h.stopListener = stopListener
 
+	log.Printf("http entrance serving at %s...", addr)
 	return h.server.Serve(h.stopListener)
-	// return h.server.ListenAndServe()
 }
 
 func (h *HttpEntry) Stop() {
