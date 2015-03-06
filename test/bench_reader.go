@@ -40,7 +40,7 @@ func main() {
 	}
 
 	var messageQueue queue.MessageQueue
-	messageQueue, err = queue.NewUnitedQueue(storage)
+	messageQueue, err = queue.NewUnitedQueue(storage, "", 0, nil)
 	if err != nil {
 		fmt.Printf("queue init error: %s\n", err)
 		return

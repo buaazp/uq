@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/gob"
 	"errors"
-	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/buaazp/uq/store"
+	. "github.com/buaazp/uq/utils"
 	"github.com/coreos/go-etcd/etcd"
 )
 
@@ -44,7 +44,7 @@ type UnitedQueue struct {
 	selfAddr   string
 	etcdClient *etcd.Client
 	etcdStop   chan bool
-	etcdwg     sync.WaitGroup
+	wg         sync.WaitGroup
 }
 
 type unitedQueueStore struct {
@@ -53,13 +53,13 @@ type unitedQueueStore struct {
 
 func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []string) (*UnitedQueue, error) {
 	topics := make(map[string]*topic)
-	selfAddr := fmt.Sprintf("%s:%d", ip, port)
 	etcdStop := make(chan bool)
 	uq := new(UnitedQueue)
 	uq.topics = topics
 	uq.storage = storage
-	uq.selfAddr = selfAddr
 	if len(etcdServers) > 0 {
+		selfAddr := Addrcat(ip, port)
+		uq.selfAddr = selfAddr
 		etcdClient := etcd.NewClient(etcdServers)
 		uq.etcdClient = etcdClient
 		go uq.etcdRun()
@@ -451,7 +451,7 @@ func (u *UnitedQueue) delData(key string) error {
 func (u *UnitedQueue) Close() {
 	log.Printf("uq stoping...")
 	close(u.etcdStop)
-	u.etcdwg.Wait()
+	u.wg.Wait()
 
 	for _, t := range u.topics {
 		t.close()

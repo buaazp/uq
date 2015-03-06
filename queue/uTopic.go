@@ -159,7 +159,7 @@ func (t *topic) push(data []byte) error {
 	t.tailLock.Lock()
 	defer t.tailLock.Unlock()
 
-	key := Acati(t.name, ":", t.tail)
+	key := Acatui(t.name, ":", t.tail)
 	err := t.q.setData(key, data)
 	if err != nil {
 		return err
@@ -182,7 +182,7 @@ func (t *topic) mPush(datas [][]byte) error {
 
 	oldTail := t.tail
 	for _, data := range datas {
-		key := Acati(t.name, ":", t.tail)
+		key := Acatui(t.name, ":", t.tail)
 		err := t.q.setData(key, data)
 		if err != nil {
 			t.tail = oldTail
@@ -250,7 +250,7 @@ func (t *topic) mConfirm(name string, ids []uint64) (int, error) {
 }
 
 func (t *topic) getData(id uint64) ([]byte, error) {
-	key := Acati(t.name, ":", id)
+	key := Acatui(t.name, ":", id)
 	return t.q.getData(key)
 }
 
@@ -327,7 +327,7 @@ func (t *topic) clean() (quit bool) {
 			return
 		}
 
-		key := Acati(t.name, ":", i)
+		key := Acatui(t.name, ":", i)
 		err = t.q.delData(key)
 		if err != nil {
 			log.Printf("del data[%s] error; %s", key, err)

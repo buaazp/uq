@@ -41,7 +41,7 @@ func NewMcEntry(host string, port int, messageQueue queue.MessageQueue) (*McEntr
 }
 
 func (m *McEntry) ListenAndServe() error {
-	addr := fmt.Sprintf("%s:%d", m.host, m.port)
+	addr := Addrcat(m.host, m.port)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
@@ -262,7 +262,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			if len(req.Keys) > 1 {
 				keyID := req.Keys[1]
 				itemID := new(Item)
-				itemID.Body = []byte(Acati(key, "/", id))
+				itemID.Body = []byte(Acatui(key, "/", id))
 				items[keyID] = itemID
 			}
 

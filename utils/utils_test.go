@@ -6,10 +6,10 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestAcati(t *testing.T) {
-	Convey("Test Acati", t, func() {
+func TestAcatui(t *testing.T) {
+	Convey("Test Acatui", t, func() {
 		key := "foo/x"
-		str := Acati(key, "/", 100)
+		str := Acatui(key, "/", 100)
 		So(str, ShouldEqual, "foo/x/100")
 	})
 }

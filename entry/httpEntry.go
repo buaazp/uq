@@ -2,7 +2,6 @@ package entry
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net"
@@ -37,7 +36,7 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	router.HandleFunc("/push/{topic}", h.pushHandler).Methods("POST")
 	router.HandleFunc("/confirm", h.confirmHandler).Methods("POST")
 
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := Addrcat(host, port)
 	server := new(http.Server)
 	server.Addr = addr
 	server.Handler = router
@@ -132,7 +131,7 @@ func (h *HttpEntry) confirmHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	// key := cr.TopicName + "/" + cr.LineName
-	key := Acati(cr.TopicName+"/"+cr.LineName, "/", cr.ID)
+	key := Acatui(cr.TopicName+"/"+cr.LineName, "/", cr.ID)
 
 	err = h.messageQueue.Confirm(key)
 	if err != nil {
@@ -144,7 +143,7 @@ func (h *HttpEntry) confirmHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (h *HttpEntry) ListenAndServe() error {
-	addr := fmt.Sprintf("%s:%d", h.host, h.port)
+	addr := Addrcat(h.host, h.port)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err

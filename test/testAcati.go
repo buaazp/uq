@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// func Acati(str, b string, n uint64) string {
+// func Acatui(str, b string, n uint64) string {
 // 	ns := strconv.FormatUint(n, 10)
 // 	log.Printf("ns: %v len: %d", ns, len([]byte(ns)))
 // 	log.Printf("ns: %v len: %d", ns, len(ns))
@@ -28,7 +28,7 @@ import (
 // 	return rst
 // }
 
-func Acati(str, b string, n uint64) string {
+func Acatui(str, b string, n uint64) string {
 	ns := strconv.FormatUint(n, 10)
 	return str + b + ns
 }
@@ -41,11 +41,11 @@ func main() {
 	n := 1000000
 	start := time.Now()
 	for i := 0; i < n; i++ {
-		_ = Acati("foo", "/", 999)
+		_ = Acatui("foo", "/", 999)
 	}
 	end := time.Now()
 	duration := end.Sub(start)
-	log.Printf("Acati duration: %v", duration)
+	log.Printf("Acatui duration: %v", duration)
 
 	start2 := time.Now()
 	for i := 0; i < n; i++ {

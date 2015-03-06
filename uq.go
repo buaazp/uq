@@ -11,11 +11,11 @@ import (
 	"runtime"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/buaazp/uq/entry"
 	"github.com/buaazp/uq/queue"
 	"github.com/buaazp/uq/store"
+	. "github.com/buaazp/uq/utils"
 )
 
 var (
@@ -99,19 +99,10 @@ func main() {
 		}
 	}(failed)
 
-	go func(c chan bool) {
-		wg.Add(1)
-		defer wg.Done()
-
-		tick := time.NewTicker(3 * time.Second)
-		select {
-		case <-c:
-			log.Printf("quit, don't start profile.")
-			return
-		case <-tick.C:
-			log.Println(http.ListenAndServe("localhost:8080", nil))
-		}
-	}(failed)
+	go func() {
+		addr := Addrcat(host, port+1)
+		log.Println(http.ListenAndServe(addr, nil))
+	}()
 
 	select {
 	case signal := <-stop:
