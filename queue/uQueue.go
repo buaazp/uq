@@ -57,25 +57,21 @@ func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []st
 	uq := new(UnitedQueue)
 	uq.topics = topics
 	uq.storage = storage
+	uq.etcdStop = etcdStop
+
 	if len(etcdServers) > 0 {
 		selfAddr := Addrcat(ip, port)
 		uq.selfAddr = selfAddr
 		etcdClient := etcd.NewClient(etcdServers)
 		uq.etcdClient = etcdClient
-		go uq.etcdRun()
 	}
-	uq.etcdStop = etcdStop
 
 	err := uq.loadQueue()
 	if err != nil {
 		return nil, err
 	}
-	// don't regiser self here because entry maybe start failed:
-	// err = uq.registerSelf()
-	// if err != nil {
-	// 	log.Printf("etcd register self error: %s", err)
-	// 	return nil, err
-	// }
+
+	go uq.etcdRun()
 	return uq, nil
 }
 
@@ -108,12 +104,6 @@ func (u *UnitedQueue) loadQueue() error {
 				}
 			}
 		}
-	}
-
-	err = u.registerTopics()
-	if err != nil {
-		log.Printf("etcd register topics error: %s", err)
-		return err
 	}
 
 	log.Printf("united queue load finisded.")
@@ -173,7 +163,7 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 
 	err = u.registerTopic(t.name)
 	if err != nil {
-		return nil, err
+		log.Printf("register topic error: %s", err)
 	}
 
 	t.start()
@@ -196,12 +186,12 @@ func (u *UnitedQueue) Create(cr *CreateRequest) error {
 			return errors.New(ErrTopicNotExisted)
 		}
 
-		err = t.createLine(cr.LineName, cr.Recycle)
+		err = t.createLine(cr.LineName, cr.Recycle, false)
 		if err != nil {
 			log.Printf("create line[%s] error: %s", cr.LineName, err)
 		}
 	} else {
-		err = u.createTopic(cr.TopicName)
+		err = u.createTopic(cr.TopicName, false)
 		if err != nil {
 			log.Printf("create topic[%s] error: %s", cr.TopicName, err)
 		}
@@ -210,7 +200,7 @@ func (u *UnitedQueue) Create(cr *CreateRequest) error {
 	return err
 }
 
-func (u *UnitedQueue) createTopic(name string) error {
+func (u *UnitedQueue) createTopic(name string, sync bool) error {
 	u.topicsLock.RLock()
 	_, ok := u.topics[name]
 	u.topicsLock.RUnlock()
@@ -233,6 +223,12 @@ func (u *UnitedQueue) createTopic(name string) error {
 		return err
 	}
 
+	if !sync {
+		err = u.registerTopic(t.name)
+		if err != nil {
+			log.Printf("register topic error: %s", err)
+		}
+	}
 	log.Printf("topic[%s] created.", name)
 	return nil
 }
@@ -254,11 +250,6 @@ func (u *UnitedQueue) newTopic(name string) (*topic, error) {
 		return nil, err
 	}
 	err = t.exportTail()
-	if err != nil {
-		return nil, err
-	}
-
-	err = u.registerTopic(t.name)
 	if err != nil {
 		return nil, err
 	}

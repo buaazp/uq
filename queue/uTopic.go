@@ -38,7 +38,7 @@ func (t *topic) start() {
 	go t.backgroundClean()
 }
 
-func (t *topic) createLine(name string, recycle time.Duration) error {
+func (t *topic) createLine(name string, recycle time.Duration, sync bool) error {
 	t.linesLock.RLock()
 	_, ok := t.lines[name]
 	t.linesLock.RUnlock()
@@ -61,6 +61,12 @@ func (t *topic) createLine(name string, recycle time.Duration) error {
 		return err
 	}
 
+	if !sync {
+		err := t.q.registerLine(t.name, l.name, l.recycle.String())
+		if err != nil {
+			log.Printf("register line error: %s", err)
+		}
+	}
 	log.Printf("line[%s:%v] created.", name, recycle)
 	return nil
 }
@@ -152,6 +158,10 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	l.inflight = inflight
 	l.t = t
 
+	err := t.q.registerLine(t.name, l.name, l.recycle.String())
+	if err != nil {
+		log.Printf("register line error: %s", err)
+	}
 	return l, nil
 }
 
@@ -280,7 +290,7 @@ func (t *topic) backgroundClean() {
 func (t *topic) clean() (quit bool) {
 	quit = false
 	if t.isClear() {
-		log.Printf("topic[%s] is clear. needn't clean.", t.name)
+		// log.Printf("topic[%s] is clear. needn't clean.", t.name)
 		return
 	}
 
@@ -294,7 +304,7 @@ func (t *topic) clean() (quit bool) {
 
 	starting := t.head
 	endTime := time.Now().Add(BgCleanTimeout)
-	log.Printf("topic[%s] begin to clean at %d", t.name, starting)
+	// log.Printf("topic[%s] begin to clean at %d", t.name, starting)
 
 	defer func() {
 		if t.head != starting {
@@ -351,10 +361,10 @@ func (t *topic) isClear() bool {
 	topicHead := t.head
 	t.headLock.RUnlock()
 	if topicTail == 0 || topicHead == topicTail-1 {
-		log.Printf("%s t.head: %d t.tail: %d", t.name, topicHead, topicTail)
+		// log.Printf("%s t.head: %d t.tail: %d", t.name, topicHead, topicTail)
 		return true
 	}
-	log.Printf("topic[%s] is clear.", t.name)
+	// log.Printf("topic[%s] is clear.", t.name)
 	return false
 }
 
@@ -374,7 +384,7 @@ func (t *topic) isBlank() bool {
 		}
 	}
 
-	log.Printf("topic[%s] is blank.", t.name)
+	// log.Printf("topic[%s] is blank.", t.name)
 	return true
 }
 

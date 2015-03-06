@@ -100,7 +100,7 @@ func main() {
 	}(failed)
 
 	go func() {
-		addr := Addrcat(host, port+1)
+		addr := Addrcat(host, 8080)
 		log.Println(http.ListenAndServe(addr, nil))
 	}()
 
