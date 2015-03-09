@@ -43,6 +43,7 @@ type UnitedQueue struct {
 	etcdLock   sync.RWMutex
 	selfAddr   string
 	etcdClient *etcd.Client
+	etcdKey    string
 	etcdStop   chan bool
 	wg         sync.WaitGroup
 }
@@ -51,7 +52,7 @@ type unitedQueueStore struct {
 	Topics []string
 }
 
-func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []string) (*UnitedQueue, error) {
+func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []string, etcdKey string) (*UnitedQueue, error) {
 	topics := make(map[string]*topic)
 	etcdStop := make(chan bool)
 	uq := new(UnitedQueue)
@@ -64,6 +65,7 @@ func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []st
 		uq.selfAddr = selfAddr
 		etcdClient := etcd.NewClient(etcdServers)
 		uq.etcdClient = etcdClient
+		uq.etcdKey = etcdKey
 	}
 
 	err := uq.loadQueue()

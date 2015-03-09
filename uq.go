@@ -19,23 +19,25 @@ import (
 )
 
 var (
-	ip         string
-	host       string
-	port       int
-	front      string
-	backend    string
-	storePath  string
-	etcdServer string
+	ip       string
+	host     string
+	port     int
+	protocol string
+	db       string
+	path     string
+	etcd     string
+	cluster  string
 )
 
 func init() {
-	flag.StringVar(&ip, "a", "127.0.0.1", "self ip address")
-	flag.StringVar(&host, "h", "0.0.0.0", "listen ip")
-	flag.IntVar(&port, "p", 6379, "listen port")
-	flag.StringVar(&front, "f", "redis", "frontend interface")
-	flag.StringVar(&backend, "b", "leveldb", "store backend")
-	flag.StringVar(&storePath, "d", "./data/uq.db", "store path")
-	flag.StringVar(&etcdServer, "etcd", "", "etcd service location")
+	flag.StringVar(&ip, "ip", "127.0.0.1", "self ip address")
+	flag.StringVar(&host, "host", "0.0.0.0", "listen ip")
+	flag.IntVar(&port, "port", 6379, "listen port")
+	flag.StringVar(&protocol, "protocol", "redis", "frontend interface(redis, mc, http)")
+	flag.StringVar(&db, "db", "leveldb", "backend storage type")
+	flag.StringVar(&path, "path", "./data/uq.db", "backend storage path")
+	flag.StringVar(&etcd, "etcd", "", "etcd service location")
+	flag.StringVar(&cluster, "cluster", "uq", "cluster name in etcd")
 }
 
 func main() {
@@ -48,9 +50,9 @@ func main() {
 
 	var err error
 	var storage store.Storage
-	if backend == "leveldb" {
-		storage, err = store.NewLevelStore(storePath)
-	} else if backend == "memory" {
+	if db == "leveldb" {
+		storage, err = store.NewLevelStore(path)
+	} else if db == "memory" {
 		storage, err = store.NewMemStore()
 	}
 	if err != nil {
@@ -59,22 +61,22 @@ func main() {
 	}
 
 	var etcdServers []string
-	if etcdServer != "" {
-		etcdServers = strings.Split(etcdServer, ",")
+	if etcd != "" {
+		etcdServers = strings.Split(etcd, ",")
 	}
 	var messageQueue queue.MessageQueue
-	messageQueue, err = queue.NewUnitedQueue(storage, ip, port, etcdServers)
+	messageQueue, err = queue.NewUnitedQueue(storage, ip, port, etcdServers, cluster)
 	if err != nil {
 		fmt.Printf("queue init error: %s\n", err)
 		return
 	}
 
 	var entrance entry.Entrance
-	if front == "http" {
+	if protocol == "http" {
 		entrance, err = entry.NewHttpEntry(host, port, messageQueue)
-	} else if front == "mc" {
+	} else if protocol == "mc" {
 		entrance, err = entry.NewMcEntry(host, port, messageQueue)
-	} else if front == "redis" {
+	} else if protocol == "redis" {
 		entrance, err = entry.NewRedisEntry(host, port, messageQueue)
 	}
 	if err != nil {

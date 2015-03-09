@@ -10,8 +10,6 @@ import (
 )
 
 const (
-	EtcdUqServerListKey   string        = "UQCLUSTER"
-	EtcdUqTopicListKey    string        = "UQTOPICS"
 	EtcdUqServerListValue string        = "online"
 	EtcdTTL               uint64        = 60
 	OneSecond             uint64        = uint64(time.Second)
@@ -64,7 +62,7 @@ func (u *UnitedQueue) etcdRun() {
 func (u *UnitedQueue) pullTopics() error {
 	log.Printf("etcd pull topics start...")
 
-	resp, err := u.etcdClient.Get(EtcdUqTopicListKey, false, true)
+	resp, err := u.etcdClient.Get(u.etcdKey+"/topics", false, true)
 	if err != nil {
 		return err
 	}
@@ -92,10 +90,10 @@ func (u *UnitedQueue) nodeTopic(node *etcd.Node) error {
 	key := node.Key
 	parts := strings.Split(key, "/")
 	log.Printf("parts: %v len: %d", parts, len(parts))
-	if len(parts) != 3 {
+	if len(parts) != 4 {
 		return errors.New(key + " parts illegal")
 	}
-	topic := parts[2]
+	topic := parts[3]
 	log.Printf("topic: %s", topic)
 	_, ok := u.topics[topic]
 	if ok {
@@ -109,12 +107,12 @@ func (u *UnitedQueue) nodeLine(node *etcd.Node) error {
 	key := node.Key
 	parts := strings.Split(key, "/")
 	log.Printf("parts: %v len: %d", parts, len(parts))
-	if len(parts) != 4 {
+	if len(parts) != 5 {
 		return errors.New(key + " parts illegal")
 	}
-	topic := parts[2]
+	topic := parts[3]
 	log.Printf("topic: %s", topic)
-	line := parts[3]
+	line := parts[4]
 	log.Printf("line: %s", line)
 	value := node.Value
 	log.Printf("recycle: %s", value)
@@ -177,7 +175,7 @@ func (u *UnitedQueue) watchRun(succChan, stopChan chan bool) {
 	defer u.wg.Done()
 
 	for {
-		resp, err := u.etcdClient.Watch(EtcdUqTopicListKey, 0, true, nil, stopChan)
+		resp, err := u.etcdClient.Watch(u.etcdKey+"/topics", 0, true, nil, stopChan)
 		if err != nil {
 			if strings.Contains(err.Error(), "stop channel") {
 				close(succChan)
@@ -231,7 +229,7 @@ func (u *UnitedQueue) unRegister() error {
 func (u *UnitedQueue) registerSelf() error {
 	// log.Printf("etcd register self...")
 
-	key := EtcdUqServerListKey + "/" + u.selfAddr
+	key := u.etcdKey + "/servers/" + u.selfAddr
 	_, err := u.etcdClient.Set(key, EtcdUqServerListValue, EtcdTTL)
 	if err != nil {
 		return err
@@ -242,7 +240,7 @@ func (u *UnitedQueue) registerSelf() error {
 func (u *UnitedQueue) unRegisterSelf() error {
 	log.Printf("etcd unregister self...")
 
-	key := EtcdUqServerListKey + "/" + u.selfAddr
+	key := u.etcdKey + "/servers/" + u.selfAddr
 	_, err := u.etcdClient.Delete(key, true)
 	if err != nil {
 		return err
@@ -294,7 +292,7 @@ func (u *UnitedQueue) registerTopic(topic string) error {
 		return err
 	}
 
-	topicKey := EtcdUqTopicListKey + "/" + topic
+	topicKey := u.etcdKey + "/topics/" + topic
 	_, err = u.etcdClient.CreateDir(topicKey, 0)
 	if err != nil {
 		return err
@@ -322,7 +320,7 @@ func (u *UnitedQueue) registerLine(topic, line, recycle string) error {
 	}
 	// log.Printf("etcd register topic[%s]...", topic)
 
-	lineKey := EtcdUqTopicListKey + "/" + topic + "/" + line
+	lineKey := u.etcdKey + "/topics/" + topic + "/" + line
 	_, err := u.etcdClient.Set(lineKey, recycle, 0)
 	if err != nil {
 		return err
