@@ -13,12 +13,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type ConfirmRequest struct {
-	TopicName string
-	LineName  string
-	ID        uint64
-}
-
 type HttpEntry struct {
 	host         string
 	port         int
@@ -31,10 +25,10 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	h := new(HttpEntry)
 
 	router := mux.NewRouter()
-	router.HandleFunc("/create", h.createHandler).Methods("POST")
+	router.HandleFunc("/add", h.addHandler).Methods("POST")
 	router.HandleFunc("/pop/{topic}/{line}", h.popHandler).Methods("GET")
 	router.HandleFunc("/push/{topic}", h.pushHandler).Methods("POST")
-	router.HandleFunc("/confirm", h.confirmHandler).Methods("POST")
+	router.HandleFunc("/del", h.delHandler).Methods("POST")
 
 	addr := Addrcat(host, port)
 	server := new(http.Server)
@@ -49,11 +43,11 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	return h, nil
 }
 
-func (h *HttpEntry) createHandler(w http.ResponseWriter, req *http.Request) {
+func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
-		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
+		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -63,14 +57,14 @@ func (h *HttpEntry) createHandler(w http.ResponseWriter, req *http.Request) {
 	err = json.Unmarshal(data, cr)
 	if err != nil {
 		log.Printf("create error: %s", err)
-		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
+		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = h.messageQueue.Create(cr)
 	if err != nil {
 		log.Printf("create error: %s", err)
-		http.Error(w, "500 Bad Request!", http.StatusInternalServerError)
+		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -83,8 +77,12 @@ func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request) {
 	key := t + "/" + l
 
 	id, data, err := h.messageQueue.Pop(key)
-	if err != nil || len(data) <= 0 {
+	if err != nil {
 		// log.Printf("pop error: %s", err)
+		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(data) <= 0 {
 		http.Error(w, "404 Not Found!", http.StatusNotFound)
 		return
 	} else {
@@ -102,41 +100,32 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
-		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
+		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	err = h.messageQueue.Push(t, data)
 	if err != nil {
 		log.Printf("push error: %s", err)
-		http.Error(w, "500 Bad Request!", http.StatusInternalServerError)
+		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) confirmHandler(w http.ResponseWriter, req *http.Request) {
+func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request) {
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
-		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
+		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	cr := new(ConfirmRequest)
-	err = json.Unmarshal(data, cr)
-	if err != nil {
-		log.Printf("confirm error: %s", err)
-		http.Error(w, "400 Bad Request!", http.StatusBadRequest)
-		return
-	}
-	// key := cr.TopicName + "/" + cr.LineName
-	key := Acatui(cr.TopicName+"/"+cr.LineName, "/", cr.ID)
+	key := string(data)
 
 	err = h.messageQueue.Confirm(key)
 	if err != nil {
 		log.Printf("confirm error: %s", err)
-		http.Error(w, "500 Bad Request!", http.StatusInternalServerError)
+		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

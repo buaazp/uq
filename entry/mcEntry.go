@@ -253,7 +253,6 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			return
 		}
 		if len(data) > 0 {
-			// log.Printf("key: %s id: %v data: %v", req.Key, id, string(data))
 			itemMsg := new(Item)
 			itemMsg.Body = data
 			items := make(map[string]*Item)
@@ -316,24 +315,6 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 
 	case "delete":
 		key := req.Keys[0]
-
-		// cr := new(queue.ConfirmRequest)
-		// parts := strings.Split(key, "/")
-		// if len(parts) != 3 {
-		// 	resp.status = "CLIENT_ERROR"
-		// 	resp.msg = ERR_C_FORMAT
-		// 	return
-		// } else {
-		// 	cr.TopicName = parts[0]
-		// 	cr.LineName = parts[1]
-		// 	id, err := strconv.ParseUint(parts[2], 10, 0)
-		// 	if err != nil {
-		// 		resp.status = "CLIENT_ERROR"
-		// 		resp.msg = ERR_C_FORMAT + err.Error()
-		// 		return
-		// 	}
-		// 	cr.ID = id
-		// }
 
 		err = m.messageQueue.Confirm(key)
 		if err != nil {
