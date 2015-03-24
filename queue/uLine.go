@@ -17,6 +17,8 @@ type line struct {
 	recycle      time.Duration
 	inflight     *list.List
 	inflightLock sync.RWMutex
+	ihead        uint64
+	imap         map[uint64]bool
 	t            *topic
 }
 
@@ -24,6 +26,7 @@ type lineStore struct {
 	Head      uint64
 	Recycle   time.Duration
 	Inflights []inflightMessage
+	Ihead     uint64
 }
 
 func (l *line) pop() (uint64, []byte, error) {
@@ -53,6 +56,7 @@ func (l *line) pop() (uint64, []byte, error) {
 
 	l.headLock.Lock()
 	defer l.headLock.Unlock()
+	tid := l.head
 
 	topicTail := l.t.getTail()
 	if l.head >= topicTail {
@@ -60,7 +64,7 @@ func (l *line) pop() (uint64, []byte, error) {
 		return 0, nil, errors.New(ErrNone)
 	}
 
-	data, err := l.t.getData(l.head)
+	data, err := l.t.getData(tid)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -68,13 +72,13 @@ func (l *line) pop() (uint64, []byte, error) {
 
 	if l.recycle > 0 {
 		msg := new(inflightMessage)
-		msg.Tid = l.head
+		msg.Tid = tid
 		msg.Exptime = time.Now().Add(l.recycle)
 
 		l.inflight.PushBack(msg)
 		// log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
+		l.imap[tid] = true
 	}
-	tid := l.head
 	l.head++
 
 	return tid, data, nil
@@ -158,8 +162,8 @@ func (l *line) confirm(id uint64) error {
 	}
 
 	l.headLock.RLock()
+	defer l.headLock.RUnlock()
 	head := l.head
-	l.headLock.RUnlock()
 	if id >= head {
 		return errors.New(ErrNotDelivered)
 	}
@@ -172,11 +176,30 @@ func (l *line) confirm(id uint64) error {
 		if msg.Tid == id {
 			l.inflight.Remove(m)
 			log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
+			l.imap[id] = false
+			l.updateiHead()
 			return nil
 		}
 	}
 
 	return errors.New(ErrNotDelivered)
+}
+
+func (l *line) updateiHead() {
+	for l.ihead < l.head {
+		id := l.ihead
+		fl, ok := l.imap[id]
+		if !ok {
+			l.ihead++
+			continue
+		}
+		if fl {
+			return
+		} else {
+			delete(l.imap, id)
+			l.ihead++
+		}
+	}
 }
 
 func (l *line) mConfirm(ids []uint64) (int, error) {
@@ -258,6 +281,7 @@ func (l *line) genLineStore() (*lineStore, error) {
 	l.headLock.RUnlock()
 	ls.Recycle = l.recycle
 	ls.Inflights = inflights
+	ls.Ihead = l.ihead
 	return ls, nil
 }
 

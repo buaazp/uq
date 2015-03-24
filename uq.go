@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/buaazp/uq/entry"
 	"github.com/buaazp/uq/queue"
@@ -86,8 +87,7 @@ func main() {
 
 	stop := make(chan os.Signal)
 	failed := make(chan bool)
-	// signal.Notify(stop, syscall.SIGINT, os.Interrupt, os.Kill)
-	signal.Notify(stop)
+	signal.Notify(stop, syscall.SIGINT, os.Interrupt, os.Kill)
 	var wg sync.WaitGroup
 	go func(c chan bool) {
 		wg.Add(1)

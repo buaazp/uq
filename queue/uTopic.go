@@ -73,11 +73,14 @@ func (t *topic) createLine(name string, recycle time.Duration, sync bool) error 
 
 func (t *topic) newLine(name string, recycle time.Duration) (*line, error) {
 	inflight := list.New()
+	imap := make(map[uint64]bool)
 	l := new(line)
 	l.name = name
 	l.head = t.head
 	l.recycle = recycle
 	l.inflight = inflight
+	l.ihead = t.head
+	l.imap = imap
 	l.t = t
 
 	return l, nil
@@ -147,8 +150,11 @@ func (t *topic) genTopicStore() (*topicStore, error) {
 func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, error) {
 	// log.Printf("loading inflights: %v", lineStoreValue.Inflights)
 	inflight := list.New()
+	imap := make(map[uint64]bool)
 	for index, _ := range lineStoreValue.Inflights {
 		inflight.PushBack(&lineStoreValue.Inflights[index])
+		msg := &lineStoreValue.Inflights[index]
+		imap[msg.Tid] = true
 	}
 
 	l := new(line)
@@ -156,6 +162,7 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	l.head = lineStoreValue.Head
 	l.recycle = lineStoreValue.Recycle
 	l.inflight = inflight
+	l.ihead = lineStoreValue.Ihead
 	l.t = t
 
 	err := t.q.registerLine(t.name, l.name, l.recycle.String())
@@ -289,15 +296,6 @@ func (t *topic) backgroundClean() {
 
 func (t *topic) clean() (quit bool) {
 	quit = false
-	if t.isClear() {
-		// log.Printf("topic[%s] is clear. needn't clean.", t.name)
-		return
-	}
-
-	if !t.isBlank() {
-		log.Printf("topic[%s] is not blank. ignore clean.", t.name)
-		return
-	}
 
 	t.headLock.RLock()
 	defer t.headLock.RUnlock()
@@ -312,45 +310,53 @@ func (t *topic) clean() (quit bool) {
 		}
 	}()
 
-	t.tailLock.RLock()
-	topicTail := t.tail
-	t.tailLock.RUnlock()
-	for i := starting; i < topicTail; i++ {
+	ending := t.getEnd()
+	for t.head < ending {
 		select {
 		case <-t.quit:
 			quit = true
-			log.Printf("catched quit at %d", i)
+			log.Printf("catched quit at %d", t.head)
 			return
 		default:
 			// nothing todo
 		}
 
 		if time.Now().After(endTime) {
-			log.Printf("cleaning timeout, break at %d", i)
+			log.Printf("cleaning timeout, break at %d", t.head)
 			return
 		}
 
-		t.head = i + 1
-		err := t.exportHead()
-		if err != nil {
-			log.Printf("export topic[%s] head error: %s", t.name, err)
-			return
-		}
-
-		key := Acatui(t.name, ":", i)
-		err = t.q.delData(key)
+		key := Acatui(t.name, ":", t.head)
+		err := t.q.delData(key)
 		if err != nil {
 			log.Printf("del data[%s] error; %s", key, err)
-			t.head = i
-			err = t.exportHead()
-			if err != nil {
-				log.Printf("export topic[%s] head failed after delData error: %s", t.name, err)
-			}
+			return
+		}
+
+		t.head++
+		err = t.exportHead()
+		if err != nil {
+			log.Printf("export topic[%s] head error: %s", t.name, err)
 			return
 		}
 	}
 
 	return
+}
+
+func (t *topic) getEnd() uint64 {
+	var end uint64
+	if len(t.lines) == 0 {
+		end = t.head
+	} else {
+		end = t.tail
+		for _, l := range t.lines {
+			if l.ihead < end {
+				end = l.ihead
+			}
+		}
+	}
+	return end
 }
 
 func (t *topic) isClear() bool {
