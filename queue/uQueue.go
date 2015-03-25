@@ -34,6 +34,7 @@ const (
 	KeyLineStore       string        = ":store"
 	KeyLineHead        string        = ":head"
 	KeyLineRecycle     string        = ":recycle"
+	KeyLineInflight    string        = ":inflight"
 )
 
 type UnitedQueue struct {
@@ -157,8 +158,8 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 				continue
 			}
 			lines[lineName] = l
-			log.Printf("line[%s] load succ.", lineStoreKey)
 			log.Printf("line: %v", l)
+			log.Printf("line[%s] load succ.", lineStoreKey)
 		}
 	}
 	t.lines = lines

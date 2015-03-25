@@ -77,11 +77,22 @@ func (t *topic) newLine(name string, recycle time.Duration) (*line, error) {
 	l := new(line)
 	l.name = name
 	l.head = t.head
+	l.headKey = t.name + "/" + name + KeyLineHead
 	l.recycle = recycle
+	l.recycleKey = t.name + "/" + name + KeyLineRecycle
 	l.inflight = inflight
 	l.ihead = t.head
 	l.imap = imap
 	l.t = t
+
+	err := l.exportHead()
+	if err != nil {
+		return nil, err
+	}
+	err = l.exportRecycle()
+	if err != nil {
+		return nil, err
+	}
 
 	return l, nil
 }
@@ -149,23 +160,45 @@ func (t *topic) genTopicStore() (*topicStore, error) {
 
 func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, error) {
 	// log.Printf("loading inflights: %v", lineStoreValue.Inflights)
-	inflight := list.New()
-	imap := make(map[uint64]bool)
-	for index, _ := range lineStoreValue.Inflights {
-		inflight.PushBack(&lineStoreValue.Inflights[index])
-		msg := &lineStoreValue.Inflights[index]
-		imap[msg.Tid] = true
-	}
-
 	l := new(line)
 	l.name = lineName
-	l.head = lineStoreValue.Head
-	l.recycle = lineStoreValue.Recycle
-	l.inflight = inflight
+	l.headKey = t.name + "/" + lineName + KeyLineHead
+	lineHeadData, err := t.q.storage.Get(l.headKey)
+	if err != nil {
+		return nil, err
+	}
+	lineHead, err := strconv.ParseUint(string(lineHeadData), 10, 0)
+	if err != nil {
+		return nil, err
+	}
+	l.head = lineHead
+	l.recycleKey = t.name + "/" + lineName + KeyLineRecycle
+	lineRecycleData, err := t.q.storage.Get(l.recycleKey)
+	if err != nil {
+		return nil, err
+	}
+	lineRecycle, err := time.ParseDuration(string(lineRecycleData))
+	if err != nil {
+		return nil, err
+	}
+	l.recycle = lineRecycle
 	l.ihead = lineStoreValue.Ihead
+	imap := make(map[uint64]bool)
+	for i := l.ihead; i < l.head; i++ {
+		imap[i] = false
+	}
+	l.imap = imap
+	inflight := list.New()
+	for index, _ := range lineStoreValue.Inflights {
+		msg := &lineStoreValue.Inflights[index]
+		inflight.PushBack(msg)
+		// inflight.PushBack(&lineStoreValue.Inflights[index])
+		imap[msg.Tid] = true
+	}
+	l.inflight = inflight
 	l.t = t
 
-	err := t.q.registerLine(t.name, l.name, l.recycle.String())
+	err = t.q.registerLine(t.name, l.name, l.recycle.String())
 	if err != nil {
 		log.Printf("register line error: %s", err)
 	}
@@ -276,9 +309,15 @@ func (t *topic) backgroundClean() {
 	defer t.wg.Done()
 
 	bgQuit := false
+	backupTick := time.NewTicker(BgBackupInterval)
 	cleanTick := time.NewTicker(BgCleanInterval)
 	for !bgQuit {
 		select {
+		case <-backupTick.C:
+			err := t.exportLines()
+			if err != nil {
+				log.Printf("export topic[%s] lines error: %s", t.name, err)
+			}
 		case <-cleanTick.C:
 			bgQuit := t.clean()
 			if bgQuit {
@@ -292,6 +331,22 @@ func (t *topic) backgroundClean() {
 		}
 	}
 	log.Printf("background clean exit.")
+}
+
+func (t *topic) exportLines() error {
+	t.linesLock.RLock()
+	defer t.linesLock.RUnlock()
+
+	for lineName, l := range t.lines {
+		err := l.exportLine()
+		if err != nil {
+			log.Printf("line[%s] export error: %s", lineName, err)
+			continue
+		}
+	}
+
+	// log.Printf("topic[%s]'s all lines exported.", t.name)
+	return nil
 }
 
 func (t *topic) clean() (quit bool) {
@@ -357,57 +412,6 @@ func (t *topic) getEnd() uint64 {
 		}
 	}
 	return end
-}
-
-func (t *topic) isClear() bool {
-	t.tailLock.RLock()
-	topicTail := t.tail
-	t.tailLock.RUnlock()
-	t.headLock.RLock()
-	topicHead := t.head
-	t.headLock.RUnlock()
-	if topicTail == 0 || topicHead == topicTail-1 {
-		// log.Printf("%s t.head: %d t.tail: %d", t.name, topicHead, topicTail)
-		return true
-	}
-	// log.Printf("topic[%s] is clear.", t.name)
-	return false
-}
-
-func (t *topic) isBlank() bool {
-	t.linesLock.RLock()
-	defer t.linesLock.RUnlock()
-
-	linesLen := len(t.lines)
-	if linesLen == 0 {
-		log.Printf("topic[%s] has no line.", t.name)
-		return false
-	}
-
-	for _, l := range t.lines {
-		if !l.isBlank() {
-			return false
-		}
-	}
-
-	// log.Printf("topic[%s] is blank.", t.name)
-	return true
-}
-
-func (t *topic) exportLines() error {
-	t.linesLock.RLock()
-	defer t.linesLock.RUnlock()
-
-	for lineName, l := range t.lines {
-		err := l.exportLine()
-		if err != nil {
-			log.Printf("line[%s] export error: %s", lineName, err)
-			continue
-		}
-	}
-
-	log.Printf("topic[%s]'s all lines exported.", t.name)
-	return nil
 }
 
 func (t *topic) close() {

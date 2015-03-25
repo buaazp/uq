@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -14,27 +15,38 @@ type line struct {
 	name         string
 	head         uint64
 	headLock     sync.RWMutex
+	headKey      string
 	recycle      time.Duration
+	recycleKey   string
 	inflight     *list.List
 	inflightLock sync.RWMutex
+	inflightKey  string
 	ihead        uint64
 	imap         map[uint64]bool
 	t            *topic
 }
 
 type lineStore struct {
-	Head      uint64
-	Recycle   time.Duration
 	Inflights []inflightMessage
 	Ihead     uint64
+}
+
+func (l *line) exportHead() error {
+	lineHeadData := []byte(strconv.FormatUint(l.head, 10))
+	return l.t.q.storage.Set(l.headKey, lineHeadData)
+}
+
+func (l *line) exportRecycle() error {
+	lineRecycleData := []byte(l.recycle.String())
+	return l.t.q.storage.Set(l.recycleKey, lineRecycleData)
 }
 
 func (l *line) pop() (uint64, []byte, error) {
 	l.inflightLock.Lock()
 	defer l.inflightLock.Unlock()
 
+	now := time.Now()
 	if l.recycle > 0 {
-		now := time.Now()
 
 		m := l.inflight.Front()
 		if m != nil {
@@ -68,18 +80,24 @@ func (l *line) pop() (uint64, []byte, error) {
 	if err != nil {
 		return 0, nil, err
 	}
+
+	l.head++
+	err = l.exportHead()
+	if err != nil {
+		l.head--
+		return 0, nil, err
+	}
 	// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
 
 	if l.recycle > 0 {
 		msg := new(inflightMessage)
 		msg.Tid = tid
-		msg.Exptime = time.Now().Add(l.recycle)
+		msg.Exptime = now.Add(l.recycle)
 
 		l.inflight.PushBack(msg)
 		// log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
 		l.imap[tid] = true
 	}
-	l.head++
 
 	return tid, data, nil
 }
@@ -91,8 +109,8 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 	fc := 0
 	ids := make([]uint64, 0)
 	datas := make([][]byte, 0)
+	now := time.Now()
 	if l.recycle > 0 {
-		now := time.Now()
 		for m := l.inflight.Front(); m != nil && fc < n; m = m.Next() {
 			msg := m.Value.(*inflightMessage)
 			if now.After(msg.Exptime) {
@@ -125,29 +143,39 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 	defer l.headLock.Unlock()
 
 	for ; fc < n; fc++ {
+		tid := l.head
 		topicTail := l.t.getTail()
 		if l.head >= topicTail {
 			// log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
 			break
 		}
 
-		data, err := l.t.getData(l.head)
+		data, err := l.t.getData(tid)
 		if err != nil {
-			return nil, nil, err
+			log.Printf("get data failed: %s", err)
+			break
 		}
-		// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
-		ids = append(ids, l.head)
+
+		l.head++
+		err = l.exportHead()
+		if err != nil {
+			log.Printf("export head failed: %s", err)
+			l.head--
+			break
+		}
+		// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, tid)
+		ids = append(ids, tid)
 		datas = append(datas, data)
 
 		if l.recycle > 0 {
 			msg := new(inflightMessage)
-			msg.Tid = l.head
-			msg.Exptime = time.Now().Add(l.recycle)
+			msg.Tid = tid
+			msg.Exptime = now.Add(l.recycle)
 
 			l.inflight.PushBack(msg)
 			// log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
+			l.imap[tid] = true
 		}
-		l.head++
 	}
 
 	if len(ids) > 0 {
@@ -226,6 +254,8 @@ func (l *line) mConfirm(ids []uint64) (int, error) {
 			if msg.Tid == id {
 				l.inflight.Remove(m)
 				log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
+				l.imap[id] = false
+				l.updateiHead()
 				confirmed++
 			}
 		}
@@ -238,7 +268,7 @@ func (l *line) mConfirm(ids []uint64) (int, error) {
 }
 
 func (l *line) exportLine() error {
-	log.Printf("start export line[%s]...", l.name)
+	// log.Printf("start export line[%s]...", l.name)
 
 	lineStoreValue, err := l.genLineStore()
 	if err != nil {
@@ -276,30 +306,7 @@ func (l *line) genLineStore() (*lineStore, error) {
 	// log.Printf("inflights: %v", inflights)
 
 	ls := new(lineStore)
-	l.headLock.RLock()
-	ls.Head = l.head
-	l.headLock.RUnlock()
-	ls.Recycle = l.recycle
 	ls.Inflights = inflights
 	ls.Ihead = l.ihead
 	return ls, nil
-}
-
-func (l *line) isBlank() bool {
-	l.inflightLock.RLock()
-	defer l.inflightLock.RUnlock()
-	if l.recycle > 0 && l.inflight.Len() > 0 {
-		log.Printf("%s l.recycle: %d l.inflight.Len(): %d", l.name, l.recycle, l.inflight.Len())
-		return false
-	}
-
-	topicTail := l.t.getTail()
-	l.headLock.RLock()
-	defer l.headLock.RUnlock()
-	if l.head < topicTail {
-		log.Printf("%s l.head: %d %s t.tail: %d", l.name, l.head, l.t.name, topicTail)
-		return false
-	}
-
-	return true
 }
