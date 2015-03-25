@@ -15,7 +15,7 @@ func TestNewUnitedQueue(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		uq.Close()
@@ -28,7 +28,7 @@ func TestCreateTopic(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
@@ -49,7 +49,7 @@ func TestCreateLine(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
@@ -79,7 +79,7 @@ func TestPush(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
@@ -104,7 +104,7 @@ func TestMultiPush(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
@@ -133,7 +133,7 @@ func TestPop(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
@@ -171,7 +171,7 @@ func TestMultiPop(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
@@ -215,7 +215,7 @@ func TestConfirm(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
@@ -258,7 +258,7 @@ func TestMultiConfirm(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()

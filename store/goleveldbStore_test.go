@@ -8,10 +8,13 @@ import (
 
 func TestNewLevelStore(t *testing.T) {
 	Convey("Test New Level Store", t, func() {
-		ldb, err := NewLevelStore("/tmp/ldb")
-		So(err, ShouldBeNil)
-		So(ldb, ShouldNotBeNil)
-		ldb.Close()
+		ldb, err := NewLevelStore("/path_not_existed")
+		So(err, ShouldNotBeNil)
+		So(ldb, ShouldBeNil)
+		ldb2, err2 := NewLevelStore("/tmp/ldb")
+		So(err2, ShouldBeNil)
+		So(ldb2, ShouldNotBeNil)
+		ldb2.Close()
 	})
 }
 
@@ -55,5 +58,19 @@ func TestDelLevel(t *testing.T) {
 
 		err = ldb.Del("foo")
 		So(err, ShouldBeNil)
+	})
+}
+
+func TestCloseLevel(t *testing.T) {
+	Convey("Test Level Store Close", t, func() {
+		ldb, err := NewLevelStore("/tmp/ldb")
+		So(err, ShouldBeNil)
+		So(ldb, ShouldNotBeNil)
+
+		err = ldb.Close()
+		So(err, ShouldBeNil)
+
+		err = ldb.Close()
+		So(err, ShouldNotBeNil)
 	})
 }

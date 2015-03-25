@@ -44,5 +44,6 @@ func (m *MemStore) Del(key string) error {
 	return nil
 }
 
-func (m *MemStore) Close() {
+func (m *MemStore) Close() error {
+	return nil
 }

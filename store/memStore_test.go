@@ -37,6 +37,10 @@ func TestGetMem(t *testing.T) {
 		data, err := mdb.Get("foo")
 		So(err, ShouldBeNil)
 		So(string(data), ShouldEqual, "bar")
+
+		data2, err := mdb.Get("bar")
+		So(err, ShouldNotBeNil)
+		So(data2, ShouldBeNil)
 	})
 }
 
@@ -50,6 +54,20 @@ func TestDelMem(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		err = mdb.Del("foo")
+		So(err, ShouldBeNil)
+
+		err = mdb.Del("bar")
+		So(err, ShouldNotBeNil)
+	})
+}
+
+func TestCloseMem(t *testing.T) {
+	Convey("Test Mem Store Close", t, func() {
+		mdb, err := NewMemStore()
+		So(err, ShouldBeNil)
+		So(mdb, ShouldNotBeNil)
+
+		err = mdb.Close()
 		So(err, ShouldBeNil)
 	})
 }

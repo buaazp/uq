@@ -9,5 +9,5 @@ type Storage interface {
 	Set(key string, data []byte) error
 	Get(key string) ([]byte, error)
 	Del(key string) error
-	Close()
+	Close() error
 }
