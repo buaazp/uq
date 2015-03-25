@@ -5,9 +5,17 @@ import (
 	"strings"
 )
 
-func Acati(str, b string, n uint64) string {
+func Acatui(str, b string, n uint64) string {
 	ns := strconv.FormatUint(n, 10)
 	return str + b + ns
+}
+
+func Acati(str, b string, n int) string {
+	return Acatui(str, b, uint64(n))
+}
+
+func Addrcat(host string, port int) string {
+	return Acati(host, ":", port)
 }
 
 func Atoi(str string) uint64 {

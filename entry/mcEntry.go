@@ -41,7 +41,7 @@ func NewMcEntry(host string, port int, messageQueue queue.MessageQueue) (*McEntr
 }
 
 func (m *McEntry) ListenAndServe() error {
-	addr := fmt.Sprintf("%s:%d", m.host, m.port)
+	addr := Addrcat(m.host, m.port)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func (m *McEntry) ListenAndServe() error {
 	}
 	m.stopListener = stopListener
 
-	log.Print("start serving at ", addr, "...\n")
+	log.Printf("mc entrance serving at %s...", addr)
 	for {
 		conn, e := m.stopListener.Accept()
 		if e != nil {
@@ -253,7 +253,6 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			return
 		}
 		if len(data) > 0 {
-			// log.Printf("key: %s id: %v data: %v", req.Key, id, string(data))
 			itemMsg := new(Item)
 			itemMsg.Body = data
 			items := make(map[string]*Item)
@@ -262,7 +261,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			if len(req.Keys) > 1 {
 				keyID := req.Keys[1]
 				itemID := new(Item)
-				itemID.Body = []byte(Acati(key, "/", id))
+				itemID.Body = []byte(Acatui(key, "/", id))
 				items[keyID] = itemID
 			}
 
@@ -316,24 +315,6 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 
 	case "delete":
 		key := req.Keys[0]
-
-		// cr := new(queue.ConfirmRequest)
-		// parts := strings.Split(key, "/")
-		// if len(parts) != 3 {
-		// 	resp.status = "CLIENT_ERROR"
-		// 	resp.msg = ERR_C_FORMAT
-		// 	return
-		// } else {
-		// 	cr.TopicName = parts[0]
-		// 	cr.LineName = parts[1]
-		// 	id, err := strconv.ParseUint(parts[2], 10, 0)
-		// 	if err != nil {
-		// 		resp.status = "CLIENT_ERROR"
-		// 		resp.msg = ERR_C_FORMAT + err.Error()
-		// 		return
-		// 	}
-		// 	cr.ID = id
-		// }
 
 		err = m.messageQueue.Confirm(key)
 		if err != nil {

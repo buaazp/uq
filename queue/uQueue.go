@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/buaazp/uq/store"
+	. "github.com/buaazp/uq/utils"
+	"github.com/coreos/go-etcd/etcd"
 )
 
 const (
@@ -32,28 +34,47 @@ const (
 	KeyLineStore       string        = ":store"
 	KeyLineHead        string        = ":head"
 	KeyLineRecycle     string        = ":recycle"
+	KeyLineInflight    string        = ":inflight"
 )
 
 type UnitedQueue struct {
 	topics     map[string]*topic
 	topicsLock sync.RWMutex
 	storage    store.Storage
+	etcdLock   sync.RWMutex
+	selfAddr   string
+	etcdClient *etcd.Client
+	etcdKey    string
+	etcdStop   chan bool
+	wg         sync.WaitGroup
 }
 
 type unitedQueueStore struct {
 	Topics []string
 }
 
-func NewUnitedQueue(storage store.Storage) (*UnitedQueue, error) {
+func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []string, etcdKey string) (*UnitedQueue, error) {
 	topics := make(map[string]*topic)
+	etcdStop := make(chan bool)
 	uq := new(UnitedQueue)
 	uq.topics = topics
 	uq.storage = storage
+	uq.etcdStop = etcdStop
+
+	if len(etcdServers) > 0 {
+		selfAddr := Addrcat(ip, port)
+		uq.selfAddr = selfAddr
+		etcdClient := etcd.NewClient(etcdServers)
+		uq.etcdClient = etcdClient
+		uq.etcdKey = etcdKey
+	}
 
 	err := uq.loadQueue()
 	if err != nil {
 		return nil, err
 	}
+
+	go uq.etcdRun()
 	return uq, nil
 }
 
@@ -137,11 +158,16 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 				continue
 			}
 			lines[lineName] = l
-			log.Printf("line[%s] load succ.", lineStoreKey)
 			log.Printf("line: %v", l)
+			log.Printf("line[%s] load succ.", lineStoreKey)
 		}
 	}
 	t.lines = lines
+
+	err = u.registerTopic(t.name)
+	if err != nil {
+		log.Printf("register topic error: %s", err)
+	}
 
 	t.start()
 	log.Printf("topic[%s] load succ.", topicName)
@@ -163,12 +189,12 @@ func (u *UnitedQueue) Create(cr *CreateRequest) error {
 			return errors.New(ErrTopicNotExisted)
 		}
 
-		err = t.createLine(cr.LineName, cr.Recycle)
+		err = t.createLine(cr.LineName, cr.Recycle, false)
 		if err != nil {
 			log.Printf("create line[%s] error: %s", cr.LineName, err)
 		}
 	} else {
-		err = u.createTopic(cr.TopicName)
+		err = u.createTopic(cr.TopicName, false)
 		if err != nil {
 			log.Printf("create topic[%s] error: %s", cr.TopicName, err)
 		}
@@ -177,7 +203,7 @@ func (u *UnitedQueue) Create(cr *CreateRequest) error {
 	return err
 }
 
-func (u *UnitedQueue) createTopic(name string) error {
+func (u *UnitedQueue) createTopic(name string, sync bool) error {
 	u.topicsLock.RLock()
 	_, ok := u.topics[name]
 	u.topicsLock.RUnlock()
@@ -200,6 +226,12 @@ func (u *UnitedQueue) createTopic(name string) error {
 		return err
 	}
 
+	if !sync {
+		err = u.registerTopic(t.name)
+		if err != nil {
+			log.Printf("register topic error: %s", err)
+		}
+	}
 	log.Printf("topic[%s] created.", name)
 	return nil
 }
@@ -224,6 +256,7 @@ func (u *UnitedQueue) newTopic(name string) (*topic, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	t.start()
 	return t, nil
 }
@@ -411,8 +444,11 @@ func (u *UnitedQueue) delData(key string) error {
 
 func (u *UnitedQueue) Close() {
 	log.Printf("uq stoping...")
+	close(u.etcdStop)
+	u.wg.Wait()
+
 	for _, t := range u.topics {
-		close(t.quit)
+		t.close()
 	}
 
 	err := u.exportTopics()

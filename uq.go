@@ -9,28 +9,36 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 
 	"github.com/buaazp/uq/entry"
 	"github.com/buaazp/uq/queue"
 	"github.com/buaazp/uq/store"
+	. "github.com/buaazp/uq/utils"
 )
 
 var (
-	host      string
-	port      int
-	front     string
-	backend   string
-	storePath string
+	ip       string
+	host     string
+	port     int
+	protocol string
+	db       string
+	path     string
+	etcd     string
+	cluster  string
 )
 
 func init() {
-	flag.StringVar(&host, "h", "0.0.0.0", "listen ip")
-	flag.IntVar(&port, "p", 11211, "listen port")
-	flag.StringVar(&front, "f", "mc", "frontend interface")
-	flag.StringVar(&backend, "b", "leveldb", "store backend")
-	flag.StringVar(&storePath, "d", "./data/uq.db", "store path")
+	flag.StringVar(&ip, "ip", "127.0.0.1", "self ip address")
+	flag.StringVar(&host, "host", "0.0.0.0", "listen ip")
+	flag.IntVar(&port, "port", 6379, "listen port")
+	flag.StringVar(&protocol, "protocol", "redis", "frontend interface(redis, mc, http)")
+	flag.StringVar(&db, "db", "leveldb", "backend storage type")
+	flag.StringVar(&path, "path", "./data/uq.db", "backend storage path")
+	flag.StringVar(&etcd, "etcd", "", "etcd service location")
+	flag.StringVar(&cluster, "cluster", "uq", "cluster name in etcd")
 }
 
 func main() {
@@ -43,9 +51,9 @@ func main() {
 
 	var err error
 	var storage store.Storage
-	if backend == "leveldb" {
-		storage, err = store.NewLevelStore(storePath)
-	} else if backend == "memory" {
+	if db == "leveldb" {
+		storage, err = store.NewLevelStore(path)
+	} else if db == "memory" {
 		storage, err = store.NewMemStore()
 	}
 	if err != nil {
@@ -53,19 +61,23 @@ func main() {
 		return
 	}
 
+	var etcdServers []string
+	if etcd != "" {
+		etcdServers = strings.Split(etcd, ",")
+	}
 	var messageQueue queue.MessageQueue
-	messageQueue, err = queue.NewUnitedQueue(storage)
+	messageQueue, err = queue.NewUnitedQueue(storage, ip, port, etcdServers, cluster)
 	if err != nil {
 		fmt.Printf("queue init error: %s\n", err)
 		return
 	}
 
 	var entrance entry.Entrance
-	if front == "http" {
+	if protocol == "http" {
 		entrance, err = entry.NewHttpEntry(host, port, messageQueue)
-	} else if front == "mc" {
+	} else if protocol == "mc" {
 		entrance, err = entry.NewMcEntry(host, port, messageQueue)
-	} else if front == "redis" {
+	} else if protocol == "redis" {
 		entrance, err = entry.NewRedisEntry(host, port, messageQueue)
 	}
 	if err != nil {
@@ -74,25 +86,35 @@ func main() {
 	}
 
 	stop := make(chan os.Signal)
-	signal.Notify(stop, syscall.SIGINT)
+	failed := make(chan bool)
+	signal.Notify(stop, syscall.SIGINT, os.Interrupt, os.Kill)
 	var wg sync.WaitGroup
-	go func() {
+	go func(c chan bool) {
 		wg.Add(1)
 		defer wg.Done()
-		entrance.ListenAndServe()
-	}()
+		err := entrance.ListenAndServe()
+		if err != nil {
+			if !strings.Contains(err.Error(), "stopped") {
+				fmt.Printf("entry listen error: %s\n", err)
+			}
+			close(c)
+		}
+	}(failed)
 
 	go func() {
-		log.Println(http.ListenAndServe("localhost:8080", nil))
+		addr := Addrcat(host, 8080)
+		log.Println(http.ListenAndServe(addr, nil))
 	}()
 
-	log.Printf("entrance serving...")
 	select {
 	case signal := <-stop:
-		log.Printf("got signal:%v", signal)
+		log.Printf("got signal: %v", signal)
+		log.Printf("entrance stoping...")
+		entrance.Stop()
+	case <-failed:
+		log.Printf("messageQueue stoping...")
+		messageQueue.Close()
 	}
-	log.Printf("entrance stoping...")
-	entrance.Stop()
 	wg.Wait()
 	fmt.Printf("byebye! uq see u later! 😄\n")
 }

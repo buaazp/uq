@@ -1,12 +1,12 @@
 package entry
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"time"
 
 	"github.com/buaazp/uq/queue"
+	. "github.com/buaazp/uq/utils"
 )
 
 const (
@@ -33,7 +33,7 @@ func NewRedisEntry(host string, port int, messageQueue queue.MessageQueue) (*Red
 }
 
 func (r *RedisEntry) ListenAndServe() error {
-	addr := fmt.Sprintf("%s:%d", r.host, r.port)
+	addr := Addrcat(r.host, r.port)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
@@ -45,6 +45,7 @@ func (r *RedisEntry) ListenAndServe() error {
 	}
 	r.stopListener = stopListener
 
+	log.Printf("redis entrance serving at %s...", addr)
 	for {
 		conn, err := r.stopListener.Accept()
 		if err != nil {
