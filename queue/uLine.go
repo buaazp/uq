@@ -3,10 +3,10 @@ package queue
 import (
 	"bytes"
 	"container/list"
+	"encoding/binary"
 	"encoding/gob"
 	"errors"
 	"log"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -32,7 +32,8 @@ type lineStore struct {
 }
 
 func (l *line) exportHead() error {
-	lineHeadData := []byte(strconv.FormatUint(l.head, 10))
+	lineHeadData := make([]byte, 8)
+	binary.LittleEndian.PutUint64(lineHeadData, l.head)
 	return l.t.q.storage.Set(l.headKey, lineHeadData)
 }
 
@@ -269,7 +270,6 @@ func (l *line) mConfirm(ids []uint64) (int, error) {
 
 func (l *line) exportLine() error {
 	// log.Printf("start export line[%s]...", l.name)
-
 	lineStoreValue, err := l.genLineStore()
 	if err != nil {
 		return err

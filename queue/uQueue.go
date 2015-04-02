@@ -2,6 +2,7 @@ package queue
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
 	"errors"
 	"log"
@@ -127,21 +128,13 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	if err != nil {
 		return nil, err
 	}
-	topicHead, err := strconv.ParseUint(string(topicHeadData), 10, 0)
-	if err != nil {
-		return nil, err
-	}
-	t.head = topicHead
+	t.head = binary.LittleEndian.Uint64(topicHeadData)
 	t.tailKey = topicName + KeyTopicTail
 	topicTailData, err := u.storage.Get(t.tailKey)
 	if err != nil {
 		return nil, err
 	}
-	topicTail, err := strconv.ParseUint(string(topicTailData), 10, 0)
-	if err != nil {
-		return nil, err
-	}
-	t.tail = topicTail
+	t.tail = binary.LittleEndian.Uint64(topicTailData)
 
 	lines := make(map[string]*line)
 	for _, lineName := range topicStoreValue.Lines {

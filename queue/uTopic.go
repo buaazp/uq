@@ -3,10 +3,10 @@ package queue
 import (
 	"bytes"
 	"container/list"
+	"encoding/binary"
 	"encoding/gob"
 	"errors"
 	"log"
-	"strconv"
 	"sync"
 	"time"
 
@@ -110,12 +110,14 @@ func (t *topic) getTail() uint64 {
 }
 
 func (t *topic) exportHead() error {
-	topicHeadData := []byte(strconv.FormatUint(t.head, 10))
+	topicHeadData := make([]byte, 8)
+	binary.LittleEndian.PutUint64(topicHeadData, t.head)
 	return t.q.storage.Set(t.headKey, topicHeadData)
 }
 
 func (t *topic) exportTail() error {
-	topicTailData := []byte(strconv.FormatUint(t.tail, 10))
+	topicTailData := make([]byte, 8)
+	binary.LittleEndian.PutUint64(topicTailData, t.head)
 	return t.q.storage.Set(t.tailKey, topicTailData)
 }
 
@@ -167,11 +169,7 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	if err != nil {
 		return nil, err
 	}
-	lineHead, err := strconv.ParseUint(string(lineHeadData), 10, 0)
-	if err != nil {
-		return nil, err
-	}
-	l.head = lineHead
+	l.head = binary.LittleEndian.Uint64(lineHeadData)
 	l.recycleKey = t.name + "/" + lineName + KeyLineRecycle
 	lineRecycleData, err := t.q.storage.Get(l.recycleKey)
 	if err != nil {
