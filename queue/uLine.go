@@ -20,7 +20,6 @@ type line struct {
 	recycleKey   string
 	inflight     *list.List
 	inflightLock sync.RWMutex
-	inflightKey  string
 	ihead        uint64
 	imap         map[uint64]bool
 	t            *topic
@@ -288,7 +287,7 @@ func (l *line) exportLine() error {
 		return err
 	}
 
-	log.Printf("line[%s] export finisded.", l.name)
+	// log.Printf("line[%s] export finisded.", l.name)
 	return nil
 }
 
@@ -309,4 +308,22 @@ func (l *line) genLineStore() (*lineStore, error) {
 	ls.Inflights = inflights
 	ls.Ihead = l.ihead
 	return ls, nil
+}
+
+func (l *line) empty() error {
+	l.inflightLock.Lock()
+	defer l.inflightLock.Unlock()
+	l.inflight.Init()
+	l.ihead = l.t.getTail()
+
+	l.headLock.Lock()
+	defer l.headLock.Unlock()
+	l.head = l.t.getTail()
+
+	err := l.exportHead()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

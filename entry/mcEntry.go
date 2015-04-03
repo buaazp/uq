@@ -271,7 +271,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 	case "add":
 		key := req.Keys[0]
 
-		cr := new(queue.CreateRequest)
+		cr := new(queue.QueueRequest)
 		parts := strings.Split(key, "/")
 		if len(parts) == 2 {
 			cr.TopicName = parts[0]

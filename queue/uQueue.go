@@ -168,7 +168,7 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	return t, nil
 }
 
-func (u *UnitedQueue) Create(cr *CreateRequest) error {
+func (u *UnitedQueue) Create(cr *QueueRequest) error {
 	if cr.TopicName == "" {
 		return errors.New(ErrKey)
 	}
@@ -196,7 +196,7 @@ func (u *UnitedQueue) Create(cr *CreateRequest) error {
 	return err
 }
 
-func (u *UnitedQueue) createTopic(name string, sync bool) error {
+func (u *UnitedQueue) createTopic(name string, fromEtcd bool) error {
 	u.topicsLock.RLock()
 	_, ok := u.topics[name]
 	u.topicsLock.RUnlock()
@@ -219,7 +219,7 @@ func (u *UnitedQueue) createTopic(name string, sync bool) error {
 		return err
 	}
 
-	if !sync {
+	if !fromEtcd {
 		err = u.registerTopic(t.name)
 		if err != nil {
 			log.Printf("register topic error: %s", err)
@@ -471,4 +471,43 @@ func (u *UnitedQueue) exportTopics() error {
 
 	log.Printf("export all topics succ.")
 	return nil
+}
+
+func (u *UnitedQueue) Empty(cr *QueueRequest) error {
+	if cr.TopicName == "" {
+		return errors.New(ErrKey)
+	}
+
+	var err error
+	if cr.LineName != "" {
+		u.topicsLock.RLock()
+		t, ok := u.topics[cr.TopicName]
+		u.topicsLock.RUnlock()
+		if !ok {
+			return errors.New(ErrTopicNotExisted)
+		}
+
+		err = t.emptyLine(cr.LineName)
+		if err != nil {
+			log.Printf("empty line[%s] error: %s", cr.LineName, err)
+		}
+	} else {
+		err = u.emptyTopic(cr.TopicName)
+		if err != nil {
+			log.Printf("empty topic[%s] error: %s", cr.TopicName, err)
+		}
+	}
+
+	return err
+}
+
+func (u *UnitedQueue) emptyTopic(name string) error {
+	u.topicsLock.RLock()
+	t, ok := u.topics[name]
+	u.topicsLock.RUnlock()
+	if !ok {
+		return errors.New(ErrTopicNotExisted)
+	}
+
+	return t.empty()
 }

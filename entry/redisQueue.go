@@ -12,7 +12,7 @@ func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 	arg := cmd.StringAtIndex(2)
 
-	cr := new(queue.CreateRequest)
+	cr := new(queue.QueueRequest)
 	parts := strings.Split(key, "/")
 	if len(parts) == 2 {
 		cr.TopicName = parts[0]
@@ -126,7 +126,7 @@ func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
 			return ErrorReply(err)
 		}
 	}
-	log.Printf("key: %s ids: %v", key, ids)
+	// log.Printf("key: %s ids: %v", key, ids)
 
 	n, err := r.messageQueue.MultiConfirm(key, ids)
 	if err != nil {
@@ -135,4 +135,25 @@ func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
 	}
 
 	return IntegerReply(n)
+}
+
+func (r *RedisEntry) OnQempty(cmd *Command) *Reply {
+	key := cmd.StringAtIndex(1)
+
+	cr := new(queue.QueueRequest)
+	parts := strings.Split(key, "/")
+	if len(parts) == 2 {
+		cr.TopicName = parts[0]
+		cr.LineName = parts[1]
+	} else if len(parts) == 1 {
+		cr.TopicName = parts[0]
+	} else {
+		return ErrorReply("ERR bad key format '" + key + "'")
+	}
+
+	err := r.messageQueue.Empty(cr)
+	if err != nil {
+		return ErrorReply(err)
+	}
+	return StatusReply("OK")
 }

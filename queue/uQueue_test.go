@@ -33,7 +33,7 @@ func TestCreateTopic(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
+		cr := new(QueueRequest)
 		cr.TopicName = "foo"
 		err = uq.Create(cr)
 		So(err, ShouldBeNil)
@@ -54,7 +54,7 @@ func TestCreateLine(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
+		cr := new(QueueRequest)
 		cr.TopicName = "foo"
 		err = uq.Create(cr)
 		So(err, ShouldBeNil)
@@ -62,7 +62,7 @@ func TestCreateLine(t *testing.T) {
 		topic := uq.topics["foo"]
 		So(topic, ShouldNotBeNil)
 
-		cr = new(CreateRequest)
+		cr = new(QueueRequest)
 		cr.TopicName = "foo"
 		cr.LineName = "x"
 		err = uq.Create(cr)
@@ -84,7 +84,7 @@ func TestPush(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
+		cr := new(QueueRequest)
 		cr.TopicName = "foo"
 		err = uq.Create(cr)
 		So(err, ShouldBeNil)
@@ -109,7 +109,7 @@ func TestMultiPush(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
+		cr := new(QueueRequest)
 		cr.TopicName = "foo"
 		err = uq.Create(cr)
 		So(err, ShouldBeNil)
@@ -138,7 +138,7 @@ func TestPop(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
+		cr := new(QueueRequest)
 		cr.TopicName = "foo"
 		err = uq.Create(cr)
 		So(err, ShouldBeNil)
@@ -150,7 +150,7 @@ func TestPop(t *testing.T) {
 		err = uq.Push("foo", data)
 		So(err, ShouldBeNil)
 
-		cr = new(CreateRequest)
+		cr = new(QueueRequest)
 		cr.TopicName = "foo"
 		cr.LineName = "x"
 		err = uq.Create(cr)
@@ -176,7 +176,7 @@ func TestMultiPop(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
+		cr := new(QueueRequest)
 		cr.TopicName = "foo"
 		err = uq.Create(cr)
 		So(err, ShouldBeNil)
@@ -192,7 +192,7 @@ func TestMultiPop(t *testing.T) {
 		err = uq.MultiPush("foo", datas)
 		So(err, ShouldBeNil)
 
-		cr = new(CreateRequest)
+		cr = new(QueueRequest)
 		cr.TopicName = "foo"
 		cr.LineName = "x"
 		err = uq.Create(cr)
@@ -220,7 +220,7 @@ func TestConfirm(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
+		cr := new(QueueRequest)
 		cr.TopicName = "foo"
 		err = uq.Create(cr)
 		So(err, ShouldBeNil)
@@ -232,7 +232,7 @@ func TestConfirm(t *testing.T) {
 		err = uq.Push("foo", data)
 		So(err, ShouldBeNil)
 
-		cr = new(CreateRequest)
+		cr = new(QueueRequest)
 		cr.TopicName = "foo"
 		cr.LineName = "x"
 		cr.Recycle = 10 * time.Second
@@ -263,7 +263,7 @@ func TestMultiConfirm(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
+		cr := new(QueueRequest)
 		cr.TopicName = "foo"
 		err = uq.Create(cr)
 		So(err, ShouldBeNil)
@@ -279,7 +279,7 @@ func TestMultiConfirm(t *testing.T) {
 		err = uq.MultiPush("foo", datas)
 		So(err, ShouldBeNil)
 
-		cr = new(CreateRequest)
+		cr = new(QueueRequest)
 		cr.TopicName = "foo"
 		cr.LineName = "x"
 		cr.Recycle = 10 * time.Second

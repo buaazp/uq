@@ -53,7 +53,7 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 
 	// len: 56
 	// json: {"TopicName":"foo","LineName":"x","Recycle":10000000000}
-	cr := new(queue.CreateRequest)
+	cr := new(queue.QueueRequest)
 	err = json.Unmarshal(data, cr)
 	if err != nil {
 		log.Printf("create error: %s", err)

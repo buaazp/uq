@@ -46,7 +46,7 @@ func main() {
 		return
 	}
 
-	cr := new(queue.CreateRequest)
+	cr := new(queue.QueueRequest)
 	cr.TopicName = *topic
 	cr.LineName = "x"
 	err = messageQueue.Create(cr)

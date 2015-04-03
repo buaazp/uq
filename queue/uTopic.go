@@ -38,7 +38,7 @@ func (t *topic) start() {
 	go t.backgroundClean()
 }
 
-func (t *topic) createLine(name string, recycle time.Duration, sync bool) error {
+func (t *topic) createLine(name string, recycle time.Duration, fromEtcd bool) error {
 	t.linesLock.RLock()
 	_, ok := t.lines[name]
 	t.linesLock.RUnlock()
@@ -61,7 +61,7 @@ func (t *topic) createLine(name string, recycle time.Duration, sync bool) error 
 		return err
 	}
 
-	if !sync {
+	if !fromEtcd {
 		err := t.q.registerLine(t.name, l.name, l.recycle.String())
 		if err != nil {
 			log.Printf("register line error: %s", err)
@@ -415,4 +415,39 @@ func (t *topic) getEnd() uint64 {
 func (t *topic) close() {
 	close(t.quit)
 	t.wg.Wait()
+}
+
+func (t *topic) emptyLine(name string) error {
+	t.linesLock.RLock()
+	l, ok := t.lines[name]
+	t.linesLock.RUnlock()
+	if !ok {
+		log.Printf("line[%s] not existed.", name)
+		return errors.New(ErrLineNotExisted)
+	}
+
+	return l.empty()
+}
+
+func (t *topic) empty() error {
+	t.linesLock.RLock()
+	defer t.linesLock.RUnlock()
+
+	for name, l := range t.lines {
+		err := l.empty()
+		if err != nil {
+			log.Printf("line[%s] empty error: %s", name, err)
+			return err
+		}
+	}
+
+	t.headLock.Lock()
+	defer t.headLock.Unlock()
+	t.head = t.tail
+	err := t.exportHead()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
