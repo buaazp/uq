@@ -13,6 +13,10 @@ import (
 	. "github.com/buaazp/uq/utils"
 )
 
+func init() {
+	gob.Register(&topicStore{})
+}
+
 type topic struct {
 	name      string
 	lines     map[string]*line
@@ -449,5 +453,6 @@ func (t *topic) empty() error {
 		return err
 	}
 
+	log.Printf("topic[%s] empty succ", t.name)
 	return nil
 }

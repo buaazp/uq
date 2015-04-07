@@ -271,11 +271,11 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 	case "add":
 		key := req.Keys[0]
 
-		cr := new(queue.QueueRequest)
+		qr := new(queue.QueueRequest)
 		parts := strings.Split(key, "/")
 		if len(parts) == 2 {
-			cr.TopicName = parts[0]
-			cr.LineName = parts[1]
+			qr.TopicName = parts[0]
+			qr.LineName = parts[1]
 			if len(req.Item.Body) > 0 {
 				data := string(req.Item.Body)
 				recycle, err := time.ParseDuration(data)
@@ -284,18 +284,18 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 					resp.msg = err.Error()
 					return
 				}
-				cr.Recycle = recycle
+				qr.Recycle = recycle
 			}
 		} else if len(parts) == 1 {
-			cr.TopicName = parts[0]
+			qr.TopicName = parts[0]
 		} else {
 			resp.status = "CLIENT_ERROR"
 			resp.msg = ERR_C_FORMAT
 			return
 		}
 
-		log.Printf("creating... %v", cr)
-		err = m.messageQueue.Create(cr)
+		log.Printf("creating... %v", qr)
+		err = m.messageQueue.Create(qr)
 		if err != nil {
 			resp.status = "SERVER_ERROR"
 			resp.msg = err.Error()

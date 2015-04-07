@@ -9,13 +9,13 @@ type QueueRequest struct {
 }
 
 type MessageQueue interface {
-	Create(cr *QueueRequest) error
+	Create(qr *QueueRequest) error
 	Push(name string, data []byte) error
 	MultiPush(name string, datas [][]byte) error
 	Pop(name string) (uint64, []byte, error)
 	MultiPop(name string, n int) ([]uint64, [][]byte, error)
 	Confirm(key string) error
 	MultiConfirm(name string, ids []uint64) (int, error)
-	Empty(cr *QueueRequest) error
+	Empty(qr *QueueRequest) error
 	Close()
 }

@@ -12,25 +12,25 @@ func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 	arg := cmd.StringAtIndex(2)
 
-	cr := new(queue.QueueRequest)
+	qr := new(queue.QueueRequest)
 	parts := strings.Split(key, "/")
 	if len(parts) == 2 {
-		cr.TopicName = parts[0]
-		cr.LineName = parts[1]
+		qr.TopicName = parts[0]
+		qr.LineName = parts[1]
 		if arg != "" {
 			recycle, err := time.ParseDuration(arg)
 			if err != nil {
 				return ErrorReply(err)
 			}
-			cr.Recycle = recycle
+			qr.Recycle = recycle
 		}
 	} else if len(parts) == 1 {
-		cr.TopicName = parts[0]
+		qr.TopicName = parts[0]
 	} else {
 		return ErrorReply("ERR bad key format '" + key + "'")
 	}
 
-	err := r.messageQueue.Create(cr)
+	err := r.messageQueue.Create(qr)
 	if err != nil {
 		return ErrorReply(err)
 	}
@@ -140,18 +140,18 @@ func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
 func (r *RedisEntry) OnQempty(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 
-	cr := new(queue.QueueRequest)
+	qr := new(queue.QueueRequest)
 	parts := strings.Split(key, "/")
 	if len(parts) == 2 {
-		cr.TopicName = parts[0]
-		cr.LineName = parts[1]
+		qr.TopicName = parts[0]
+		qr.LineName = parts[1]
 	} else if len(parts) == 1 {
-		cr.TopicName = parts[0]
+		qr.TopicName = parts[0]
 	} else {
 		return ErrorReply("ERR bad key format '" + key + "'")
 	}
 
-	err := r.messageQueue.Empty(cr)
+	err := r.messageQueue.Empty(qr)
 	if err != nil {
 		return ErrorReply(err)
 	}

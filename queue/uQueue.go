@@ -16,6 +16,10 @@ import (
 	"github.com/coreos/go-etcd/etcd"
 )
 
+func init() {
+	gob.Register(&unitedQueueStore{})
+}
+
 const (
 	StorageKeyWord     string        = "UnitedQueueKey"
 	ErrBadKey          string        = "Bad Key Format"
@@ -120,8 +124,6 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	t.name = topicName
 	t.q = u
 	t.quit = make(chan bool)
-	// t.head = topicStreValue.Head
-	// t.tail = topicStoreValue.Tail
 
 	t.headKey = topicName + KeyTopicHead
 	topicHeadData, err := u.storage.Get(t.headKey)
@@ -168,28 +170,28 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	return t, nil
 }
 
-func (u *UnitedQueue) Create(cr *QueueRequest) error {
-	if cr.TopicName == "" {
+func (u *UnitedQueue) Create(qr *QueueRequest) error {
+	if qr.TopicName == "" {
 		return errors.New(ErrKey)
 	}
 
 	var err error
-	if cr.LineName != "" {
+	if qr.LineName != "" {
 		u.topicsLock.RLock()
-		t, ok := u.topics[cr.TopicName]
+		t, ok := u.topics[qr.TopicName]
 		u.topicsLock.RUnlock()
 		if !ok {
 			return errors.New(ErrTopicNotExisted)
 		}
 
-		err = t.createLine(cr.LineName, cr.Recycle, false)
+		err = t.createLine(qr.LineName, qr.Recycle, false)
 		if err != nil {
-			log.Printf("create line[%s] error: %s", cr.LineName, err)
+			log.Printf("create line[%s] error: %s", qr.LineName, err)
 		}
 	} else {
-		err = u.createTopic(cr.TopicName, false)
+		err = u.createTopic(qr.TopicName, false)
 		if err != nil {
-			log.Printf("create topic[%s] error: %s", cr.TopicName, err)
+			log.Printf("create topic[%s] error: %s", qr.TopicName, err)
 		}
 	}
 
@@ -473,28 +475,28 @@ func (u *UnitedQueue) exportTopics() error {
 	return nil
 }
 
-func (u *UnitedQueue) Empty(cr *QueueRequest) error {
-	if cr.TopicName == "" {
+func (u *UnitedQueue) Empty(qr *QueueRequest) error {
+	if qr.TopicName == "" {
 		return errors.New(ErrKey)
 	}
 
 	var err error
-	if cr.LineName != "" {
+	if qr.LineName != "" {
 		u.topicsLock.RLock()
-		t, ok := u.topics[cr.TopicName]
+		t, ok := u.topics[qr.TopicName]
 		u.topicsLock.RUnlock()
 		if !ok {
 			return errors.New(ErrTopicNotExisted)
 		}
 
-		err = t.emptyLine(cr.LineName)
+		err = t.emptyLine(qr.LineName)
 		if err != nil {
-			log.Printf("empty line[%s] error: %s", cr.LineName, err)
+			log.Printf("empty line[%s] error: %s", qr.LineName, err)
 		}
 	} else {
-		err = u.emptyTopic(cr.TopicName)
+		err = u.emptyTopic(qr.TopicName)
 		if err != nil {
-			log.Printf("empty topic[%s] error: %s", cr.TopicName, err)
+			log.Printf("empty topic[%s] error: %s", qr.TopicName, err)
 		}
 	}
 

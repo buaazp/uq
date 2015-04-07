@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+func init() {
+	gob.Register(&lineStore{})
+}
+
 type line struct {
 	name         string
 	head         uint64
@@ -314,6 +318,7 @@ func (l *line) empty() error {
 	l.inflightLock.Lock()
 	defer l.inflightLock.Unlock()
 	l.inflight.Init()
+	l.imap = make(map[uint64]bool)
 	l.ihead = l.t.getTail()
 
 	l.headLock.Lock()
@@ -325,5 +330,6 @@ func (l *line) empty() error {
 		return err
 	}
 
+	log.Printf("line[%s] empty succ", l.name)
 	return nil
 }

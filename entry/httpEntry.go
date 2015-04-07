@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/buaazp/uq/queue"
 	. "github.com/buaazp/uq/utils"
@@ -21,6 +22,12 @@ type HttpEntry struct {
 	messageQueue queue.MessageQueue
 }
 
+type HttpQueueRequest struct {
+	TopicName string `json:"topic"`
+	LineName  string `json:"line,omitempty"`
+	Recycle   string `json:"recycle,omitempty"`
+}
+
 func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*HttpEntry, error) {
 	h := new(HttpEntry)
 
@@ -29,6 +36,7 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	router.HandleFunc("/pop/{topic}/{line}", h.popHandler).Methods("GET")
 	router.HandleFunc("/push/{topic}", h.pushHandler).Methods("POST")
 	router.HandleFunc("/del", h.delHandler).Methods("POST")
+	router.HandleFunc("/empty", h.emptyHandler).Methods("POST")
 
 	addr := Addrcat(host, port)
 	server := new(http.Server)
@@ -51,17 +59,30 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// len: 56
-	// json: {"TopicName":"foo","LineName":"x","Recycle":10000000000}
-	cr := new(queue.QueueRequest)
-	err = json.Unmarshal(data, cr)
+	// Use test/genHttpJsonReq.go to generate json string
+	// len = 47 json: {"topic":"foo","line":"x","recycle":"1h10m30s"}
+	hqr := new(HttpQueueRequest)
+	err = json.Unmarshal(data, hqr)
 	if err != nil {
 		log.Printf("create error: %s", err)
 		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	err = h.messageQueue.Create(cr)
+	qr := new(queue.QueueRequest)
+	qr.TopicName = hqr.TopicName
+	qr.LineName = hqr.LineName
+	if hqr.Recycle != "" {
+		recycle, err := time.ParseDuration(hqr.Recycle)
+		if err != nil {
+			log.Printf("create error: %s", err)
+			http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+			return
+		}
+		qr.Recycle = recycle
+	}
+
+	err = h.messageQueue.Create(qr)
 	if err != nil {
 		log.Printf("create error: %s", err)
 		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
@@ -78,8 +99,11 @@ func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request) {
 
 	id, data, err := h.messageQueue.Pop(key)
 	if err != nil {
-		// log.Printf("pop error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		if err.Error() == queue.ErrNone {
+			http.Error(w, "404 Not Found!", http.StatusNotFound)
+		} else {
+			http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
 	if len(data) <= 0 {
@@ -125,6 +149,36 @@ func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request) {
 	err = h.messageQueue.Confirm(key)
 	if err != nil {
 		log.Printf("confirm error: %s", err)
+		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request) {
+	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
+	data, err := ioutil.ReadAll(limitedr)
+	if err != nil {
+		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Use test/genHttpJsonReq.go to generate json string
+	// len = 55 json: {"TopicName":"foo","LineName":"x","Recycle":"1h10m30s"}
+	hqr := new(HttpQueueRequest)
+	err = json.Unmarshal(data, hqr)
+	if err != nil {
+		log.Printf("empty error: %s", err)
+		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	qr := new(queue.QueueRequest)
+	qr.TopicName = hqr.TopicName
+	qr.LineName = hqr.LineName
+	err = h.messageQueue.Empty(qr)
+	if err != nil {
+		log.Printf("empty error: %s", err)
 		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
 		return
 	}

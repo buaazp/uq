@@ -46,10 +46,10 @@ func main() {
 		return
 	}
 
-	cr := new(queue.QueueRequest)
-	cr.TopicName = *topic
-	cr.LineName = "x"
-	err = messageQueue.Create(cr)
+	qr := new(queue.QueueRequest)
+	qr.TopicName = *topic
+	qr.LineName = "x"
+	err = messageQueue.Create(qr)
 	if err != nil && err.Error() != queue.ErrLineExisted {
 		fmt.Printf("line create error: %s\n", err)
 		return

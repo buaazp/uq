@@ -33,9 +33,9 @@ func TestCreateTopic(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(QueueRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -54,18 +54,18 @@ func TestCreateLine(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(QueueRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
 		So(topic, ShouldNotBeNil)
 
-		cr = new(QueueRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
@@ -84,9 +84,9 @@ func TestPush(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(QueueRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -109,9 +109,9 @@ func TestMultiPush(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(QueueRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -138,9 +138,9 @@ func TestPop(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(QueueRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -150,10 +150,10 @@ func TestPop(t *testing.T) {
 		err = uq.Push("foo", data)
 		So(err, ShouldBeNil)
 
-		cr = new(QueueRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
@@ -176,9 +176,9 @@ func TestMultiPop(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(QueueRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -192,10 +192,10 @@ func TestMultiPop(t *testing.T) {
 		err = uq.MultiPush("foo", datas)
 		So(err, ShouldBeNil)
 
-		cr = new(QueueRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
@@ -220,9 +220,9 @@ func TestConfirm(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(QueueRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -232,11 +232,11 @@ func TestConfirm(t *testing.T) {
 		err = uq.Push("foo", data)
 		So(err, ShouldBeNil)
 
-		cr = new(QueueRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		cr.Recycle = 10 * time.Second
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		qr.Recycle = 10 * time.Second
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
@@ -263,9 +263,9 @@ func TestMultiConfirm(t *testing.T) {
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(QueueRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -279,11 +279,11 @@ func TestMultiConfirm(t *testing.T) {
 		err = uq.MultiPush("foo", datas)
 		So(err, ShouldBeNil)
 
-		cr = new(QueueRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		cr.Recycle = 10 * time.Second
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		qr.Recycle = 10 * time.Second
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
