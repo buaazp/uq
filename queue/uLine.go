@@ -5,10 +5,11 @@ import (
 	"container/list"
 	"encoding/binary"
 	"encoding/gob"
-	"errors"
 	"log"
 	"sync"
 	"time"
+
+	. "github.com/buaazp/uq/utils"
 )
 
 func init() {
@@ -37,12 +38,26 @@ type lineStore struct {
 func (l *line) exportHead() error {
 	lineHeadData := make([]byte, 8)
 	binary.LittleEndian.PutUint64(lineHeadData, l.head)
-	return l.t.q.storage.Set(l.headKey, lineHeadData)
+	err := l.t.q.storage.Set(l.headKey, lineHeadData)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func (l *line) exportRecycle() error {
 	lineRecycleData := []byte(l.recycle.String())
-	return l.t.q.storage.Set(l.recycleKey, lineRecycleData)
+	err := l.t.q.storage.Set(l.recycleKey, lineRecycleData)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func (l *line) pop() (uint64, []byte, error) {
@@ -77,7 +92,10 @@ func (l *line) pop() (uint64, []byte, error) {
 	topicTail := l.t.getTail()
 	if l.head >= topicTail {
 		// log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
-		return 0, nil, errors.New(ErrNone)
+		return 0, nil, NewError(
+			ErrNone,
+			`line pop`,
+		)
 	}
 
 	data, err := l.t.getData(tid)
@@ -185,19 +203,28 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 	if len(ids) > 0 {
 		return ids, datas, nil
 	}
-	return nil, nil, errors.New(ErrNone)
+	return nil, nil, NewError(
+		ErrNone,
+		`line mPop`,
+	)
 }
 
 func (l *line) confirm(id uint64) error {
 	if l.recycle == 0 {
-		return errors.New(ErrNotDelivered)
+		return NewError(
+			ErrNotDelivered,
+			`line confirm`,
+		)
 	}
 
 	l.headLock.RLock()
 	defer l.headLock.RUnlock()
 	head := l.head
 	if id >= head {
-		return errors.New(ErrNotDelivered)
+		return NewError(
+			ErrNotDelivered,
+			`line confirm`,
+		)
 	}
 
 	l.inflightLock.Lock()
@@ -214,7 +241,10 @@ func (l *line) confirm(id uint64) error {
 		}
 	}
 
-	return errors.New(ErrNotDelivered)
+	return NewError(
+		ErrNotDelivered,
+		`line confirm`,
+	)
 }
 
 func (l *line) updateiHead() {
@@ -236,7 +266,10 @@ func (l *line) updateiHead() {
 
 func (l *line) mConfirm(ids []uint64) (int, error) {
 	if l.recycle == 0 {
-		return 0, errors.New(ErrNotDelivered)
+		return 0, NewError(
+			ErrNotDelivered,
+			`line mConfirm`,
+		)
 	}
 
 	l.headLock.RLock()
@@ -266,7 +299,10 @@ func (l *line) mConfirm(ids []uint64) (int, error) {
 	}
 
 	if confirmed == 0 {
-		return 0, errors.New(ErrNotDelivered)
+		return 0, NewError(
+			ErrNotDelivered,
+			`line mConfirm`,
+		)
 	}
 	return confirmed, nil
 }
@@ -282,13 +318,19 @@ func (l *line) exportLine() error {
 	enc := gob.NewEncoder(buffer)
 	err = enc.Encode(lineStoreValue)
 	if err != nil {
-		return err
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 
 	lineStoreKey := l.t.name + "/" + l.name
 	err = l.t.q.storage.Set(lineStoreKey, buffer.Bytes())
 	if err != nil {
-		return err
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 
 	// log.Printf("line[%s] export finisded.", l.name)

@@ -34,7 +34,7 @@ var (
 func init() {
 	flag.StringVar(&ip, "ip", "127.0.0.1", "self ip/host address")
 	flag.StringVar(&host, "host", "0.0.0.0", "listen ip")
-	flag.IntVar(&port, "port", 9689, "listen port")
+	flag.IntVar(&port, "port", 8808, "listen port")
 	flag.StringVar(&protocol, "protocol", "redis", "frontend interface type [redis/mc/http]")
 	flag.StringVar(&db, "db", "leveldb", "backend storage type [leveldb/memdb]")
 	flag.StringVar(&dir, "dir", "./data", "backend storage path")

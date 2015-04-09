@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
-	"errors"
 	"log"
 	"strconv"
 	"strings"
@@ -21,25 +20,17 @@ func init() {
 }
 
 const (
-	StorageKeyWord     string        = "UnitedQueueKey"
-	ErrBadKey          string        = "Bad Key Format"
-	ErrTopicNotExisted string        = "Topic Not Existed"
-	ErrLineNotExisted  string        = "Line Not Existed"
-	ErrTopicExisted    string        = "Topic Has Existed"
-	ErrLineExisted     string        = "Line Has Existed"
-	ErrNotDelivered    string        = "Message Not Delivered"
-	ErrKey             string        = "Key Illegal"
-	ErrNone            string        = "No Message"
-	BgBackupInterval   time.Duration = 10 * time.Second
-	BgCleanInterval    time.Duration = 20 * time.Second
-	BgCleanTimeout     time.Duration = 5 * time.Second
-	KeyTopicStore      string        = ":store"
-	KeyTopicHead       string        = ":head"
-	KeyTopicTail       string        = ":tail"
-	KeyLineStore       string        = ":store"
-	KeyLineHead        string        = ":head"
-	KeyLineRecycle     string        = ":recycle"
-	KeyLineInflight    string        = ":inflight"
+	StorageKeyWord   string        = "UnitedQueueKey"
+	BgBackupInterval time.Duration = 10 * time.Second
+	BgCleanInterval  time.Duration = 20 * time.Second
+	BgCleanTimeout   time.Duration = 5 * time.Second
+	KeyTopicStore    string        = ":store"
+	KeyTopicHead     string        = ":head"
+	KeyTopicTail     string        = ":tail"
+	KeyLineStore     string        = ":store"
+	KeyLineHead      string        = ":head"
+	KeyLineRecycle   string        = ":recycle"
+	KeyLineInflight  string        = ":inflight"
 )
 
 type UnitedQueue struct {
@@ -172,7 +163,10 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 
 func (u *UnitedQueue) Create(qr *QueueRequest) error {
 	if qr.TopicName == "" {
-		return errors.New(ErrKey)
+		return NewError(
+			ErrBadKey,
+			`create topic name is nil`,
+		)
 	}
 
 	var err error
@@ -181,7 +175,10 @@ func (u *UnitedQueue) Create(qr *QueueRequest) error {
 		t, ok := u.topics[qr.TopicName]
 		u.topicsLock.RUnlock()
 		if !ok {
-			return errors.New(ErrTopicNotExisted)
+			return NewError(
+				ErrTopicNotExisted,
+				`queue create`,
+			)
 		}
 
 		err = t.createLine(qr.LineName, qr.Recycle, false)
@@ -203,7 +200,10 @@ func (u *UnitedQueue) createTopic(name string, fromEtcd bool) error {
 	_, ok := u.topics[name]
 	u.topicsLock.RUnlock()
 	if ok {
-		return errors.New(ErrTopicExisted)
+		return NewError(
+			ErrTopicExisted,
+			`queue createTopic`,
+		)
 	}
 
 	t, err := u.newTopic(name)
@@ -268,12 +268,18 @@ func (u *UnitedQueue) exportQueue() error {
 	enc := gob.NewEncoder(buffer)
 	err = enc.Encode(queueStoreValue)
 	if err != nil {
-		return err
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 
 	err = u.storage.Set(StorageKeyWord, buffer.Bytes())
 	if err != nil {
-		return err
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 
 	log.Printf("united queue export finisded.")
@@ -301,7 +307,10 @@ func (u *UnitedQueue) Push(name string, data []byte) error {
 	t, ok := u.topics[name]
 	u.topicsLock.RUnlock()
 	if !ok {
-		return errors.New(ErrTopicNotExisted)
+		return NewError(
+			ErrTopicNotExisted,
+			`queue push`,
+		)
 	}
 
 	return t.push(data)
@@ -312,7 +321,10 @@ func (u *UnitedQueue) MultiPush(name string, datas [][]byte) error {
 	t, ok := u.topics[name]
 	u.topicsLock.RUnlock()
 	if !ok {
-		return errors.New(ErrTopicNotExisted)
+		return NewError(
+			ErrTopicNotExisted,
+			`queue multiPush`,
+		)
 	}
 
 	return t.mPush(datas)
@@ -321,7 +333,10 @@ func (u *UnitedQueue) MultiPush(name string, datas [][]byte) error {
 func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 2 {
-		return 0, nil, errors.New(ErrKey)
+		return 0, nil, NewError(
+			ErrBadKey,
+			`pop key parts error: `+ItoaQuick(len(parts)),
+		)
 	}
 
 	tName := parts[0]
@@ -332,7 +347,10 @@ func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {
 	u.topicsLock.RUnlock()
 	if !ok {
 		log.Printf("topic[%s] not existed.", tName)
-		return 0, nil, errors.New(ErrTopicNotExisted)
+		return 0, nil, NewError(
+			ErrTopicNotExisted,
+			`queue pop`,
+		)
 	}
 
 	return t.pop(lName)
@@ -341,7 +359,10 @@ func (u *UnitedQueue) Pop(name string) (uint64, []byte, error) {
 func (u *UnitedQueue) MultiPop(name string, n int) ([]uint64, [][]byte, error) {
 	parts := strings.Split(name, "/")
 	if len(parts) != 2 {
-		return nil, nil, errors.New(ErrKey)
+		return nil, nil, NewError(
+			ErrBadKey,
+			`mPop key parts error: `+ItoaQuick(len(parts)),
+		)
 	}
 
 	tName := parts[0]
@@ -352,7 +373,10 @@ func (u *UnitedQueue) MultiPop(name string, n int) ([]uint64, [][]byte, error) {
 	u.topicsLock.RUnlock()
 	if !ok {
 		log.Printf("topic[%s] not existed.", tName)
-		return nil, nil, errors.New(ErrTopicNotExisted)
+		return nil, nil, NewError(
+			ErrTopicNotExisted,
+			`queue multiPop`,
+		)
 	}
 
 	return t.mPop(lName, n)
@@ -364,13 +388,19 @@ func (u *UnitedQueue) Confirm(key string) error {
 	var err error
 	parts := strings.Split(key, "/")
 	if len(parts) != 3 {
-		return errors.New(ErrBadKey)
+		return NewError(
+			ErrBadKey,
+			`confirm key parts error: `+ItoaQuick(len(parts)),
+		)
 	} else {
 		topicName = parts[0]
 		lineName = parts[1]
 		id, err = strconv.ParseUint(parts[2], 10, 0)
 		if err != nil {
-			return errors.New(ErrBadKey)
+			return NewError(
+				ErrBadKey,
+				`confirm key parse id error: `+err.Error(),
+			)
 		}
 	}
 
@@ -379,7 +409,10 @@ func (u *UnitedQueue) Confirm(key string) error {
 	u.topicsLock.RUnlock()
 	if !ok {
 		log.Printf("topic[%s] not existed.", topicName)
-		return errors.New(ErrTopicNotExisted)
+		return NewError(
+			ErrTopicNotExisted,
+			`queue confirm`,
+		)
 	}
 
 	return t.confirm(lineName, id)
@@ -389,7 +422,10 @@ func (u *UnitedQueue) MultiConfirm(name string, ids []uint64) (int, error) {
 	var topicName, lineName string
 	parts := strings.Split(name, "/")
 	if len(parts) != 2 {
-		return 0, errors.New(ErrBadKey)
+		return 0, NewError(
+			ErrBadKey,
+			`mConfirm key parts error: `+ItoaQuick(len(parts)),
+		)
 	} else {
 		topicName = parts[0]
 		lineName = parts[1]
@@ -400,41 +436,49 @@ func (u *UnitedQueue) MultiConfirm(name string, ids []uint64) (int, error) {
 	u.topicsLock.RUnlock()
 	if !ok {
 		log.Printf("topic[%s] not existed.", topicName)
-		return 0, errors.New(ErrTopicNotExisted)
+		return 0, NewError(
+			ErrTopicNotExisted,
+			`queue multiConfirm`,
+		)
 	}
 
 	return t.mConfirm(lineName, ids)
 }
 
 func (u *UnitedQueue) setData(key string, data []byte) error {
-	return u.storage.Set(key, data)
-	// err := u.storage.Set(key, data)
-	// if err != nil {
-	// 	log.Printf("key[%s] set data error: %s", key, err)
-	// } else {
-	// 	log.Printf("key[%s] set data succ", key)
-	// }
-	// return nil
+	err := u.storage.Set(key, data)
+	if err != nil {
+		log.Printf("key[%s] set data error: %s", key, err)
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func (u *UnitedQueue) getData(key string) ([]byte, error) {
-	return u.storage.Get(key)
-	// data, err := u.storage.Get(key)
-	// if err != nil {
-	// 	log.Printf("key[%s] get data error: %s", key, err)
-	// 	return nil, err
-	// }
-	// return data, nil
+	data, err := u.storage.Get(key)
+	if err != nil {
+		log.Printf("key[%s] get data error: %s", key, err)
+		return nil, NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return data, nil
 }
 
 func (u *UnitedQueue) delData(key string) error {
-	return u.storage.Del(key)
-	// err := u.storage.Del(key)
-	// if err != nil {
-	// 	log.Printf("key[%s] del data error: %s", key, err)
-	// 	return err
-	// }
-	// return nil
+	err := u.storage.Del(key)
+	if err != nil {
+		log.Printf("key[%s] del data error: %s", key, err)
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func (u *UnitedQueue) Close() {
@@ -477,7 +521,10 @@ func (u *UnitedQueue) exportTopics() error {
 
 func (u *UnitedQueue) Empty(qr *QueueRequest) error {
 	if qr.TopicName == "" {
-		return errors.New(ErrKey)
+		return NewError(
+			ErrBadKey,
+			`empty topic is nil`,
+		)
 	}
 
 	var err error
@@ -486,7 +533,10 @@ func (u *UnitedQueue) Empty(qr *QueueRequest) error {
 		t, ok := u.topics[qr.TopicName]
 		u.topicsLock.RUnlock()
 		if !ok {
-			return errors.New(ErrTopicNotExisted)
+			return NewError(
+				ErrTopicNotExisted,
+				`queue empty`,
+			)
 		}
 
 		err = t.emptyLine(qr.LineName)
@@ -508,7 +558,10 @@ func (u *UnitedQueue) emptyTopic(name string) error {
 	t, ok := u.topics[name]
 	u.topicsLock.RUnlock()
 	if !ok {
-		return errors.New(ErrTopicNotExisted)
+		return NewError(
+			ErrTopicNotExisted,
+			`queue emptyTopic`,
+		)
 	}
 
 	return t.empty()

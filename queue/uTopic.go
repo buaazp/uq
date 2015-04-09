@@ -5,7 +5,6 @@ import (
 	"container/list"
 	"encoding/binary"
 	"encoding/gob"
-	"errors"
 	"log"
 	"sync"
 	"time"
@@ -47,7 +46,10 @@ func (t *topic) createLine(name string, recycle time.Duration, fromEtcd bool) er
 	_, ok := t.lines[name]
 	t.linesLock.RUnlock()
 	if ok {
-		return errors.New(ErrLineExisted)
+		return NewError(
+			ErrLineExisted,
+			`topic createLine`,
+		)
 	}
 
 	l, err := t.newLine(name, recycle)
@@ -116,13 +118,27 @@ func (t *topic) getTail() uint64 {
 func (t *topic) exportHead() error {
 	topicHeadData := make([]byte, 8)
 	binary.LittleEndian.PutUint64(topicHeadData, t.head)
-	return t.q.storage.Set(t.headKey, topicHeadData)
+	err := t.q.storage.Set(t.headKey, topicHeadData)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func (t *topic) exportTail() error {
 	topicTailData := make([]byte, 8)
-	binary.LittleEndian.PutUint64(topicTailData, t.head)
-	return t.q.storage.Set(t.tailKey, topicTailData)
+	binary.LittleEndian.PutUint64(topicTailData, t.tail)
+	err := t.q.storage.Set(t.tailKey, topicTailData)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func (t *topic) exportTopic() error {
@@ -135,12 +151,18 @@ func (t *topic) exportTopic() error {
 	enc := gob.NewEncoder(buffer)
 	err = enc.Encode(topicStoreValue)
 	if err != nil {
-		return err
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 
 	err = t.q.storage.Set(t.name, buffer.Bytes())
 	if err != nil {
-		return err
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 
 	// log.Printf("topic[%s] export finisded.", t.name)
@@ -171,17 +193,26 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	l.headKey = t.name + "/" + lineName + KeyLineHead
 	lineHeadData, err := t.q.storage.Get(l.headKey)
 	if err != nil {
-		return nil, err
+		return nil, NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 	l.head = binary.LittleEndian.Uint64(lineHeadData)
 	l.recycleKey = t.name + "/" + lineName + KeyLineRecycle
 	lineRecycleData, err := t.q.storage.Get(l.recycleKey)
 	if err != nil {
-		return nil, err
+		return nil, NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 	lineRecycle, err := time.ParseDuration(string(lineRecycleData))
 	if err != nil {
-		return nil, err
+		return nil, NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 	l.recycle = lineRecycle
 	l.ihead = lineStoreValue.Ihead
@@ -259,7 +290,10 @@ func (t *topic) pop(name string) (uint64, []byte, error) {
 	t.linesLock.RUnlock()
 	if !ok {
 		log.Printf("line[%s] not existed.", name)
-		return 0, nil, errors.New(ErrLineNotExisted)
+		return 0, nil, NewError(
+			ErrLineNotExisted,
+			`topic pop`,
+		)
 	}
 
 	return l.pop()
@@ -271,7 +305,10 @@ func (t *topic) mPop(name string, n int) ([]uint64, [][]byte, error) {
 	t.linesLock.RUnlock()
 	if !ok {
 		log.Printf("line[%s] not existed.", name)
-		return nil, nil, errors.New(ErrLineNotExisted)
+		return nil, nil, NewError(
+			ErrLineNotExisted,
+			`topic mPop`,
+		)
 	}
 
 	return l.mPop(n)
@@ -283,7 +320,10 @@ func (t *topic) confirm(name string, id uint64) error {
 	t.linesLock.RUnlock()
 	if !ok {
 		log.Printf("line[%s] not existed.", name)
-		return errors.New(ErrLineNotExisted)
+		return NewError(
+			ErrLineNotExisted,
+			`topic confirm`,
+		)
 	}
 
 	return l.confirm(id)
@@ -295,7 +335,10 @@ func (t *topic) mConfirm(name string, ids []uint64) (int, error) {
 	t.linesLock.RUnlock()
 	if !ok {
 		log.Printf("line[%s] not existed.", name)
-		return 0, errors.New(ErrLineNotExisted)
+		return 0, NewError(
+			ErrLineNotExisted,
+			`topic mConfirm`,
+		)
 	}
 
 	return l.mConfirm(ids)
@@ -408,8 +451,14 @@ func (t *topic) getEnd() uint64 {
 	} else {
 		end = t.tail
 		for _, l := range t.lines {
-			if l.ihead < end {
-				end = l.ihead
+			if l.recycle > 0 {
+				if l.ihead < end {
+					end = l.ihead
+				}
+			} else {
+				if l.head < end {
+					end = l.head
+				}
 			}
 		}
 	}
@@ -427,7 +476,10 @@ func (t *topic) emptyLine(name string) error {
 	t.linesLock.RUnlock()
 	if !ok {
 		log.Printf("line[%s] not existed.", name)
-		return errors.New(ErrLineNotExisted)
+		return NewError(
+			ErrLineNotExisted,
+			`topic emptyLine`,
+		)
 	}
 
 	return l.empty()

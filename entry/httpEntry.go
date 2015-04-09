@@ -55,7 +55,10 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		writeErrorHttp(w, NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 		return
 	}
 
@@ -64,8 +67,10 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 	hqr := new(HttpQueueRequest)
 	err = json.Unmarshal(data, hqr)
 	if err != nil {
-		log.Printf("create error: %s", err)
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		writeErrorHttp(w, NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 		return
 	}
 
@@ -75,8 +80,10 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 	if hqr.Recycle != "" {
 		recycle, err := time.ParseDuration(hqr.Recycle)
 		if err != nil {
-			log.Printf("create error: %s", err)
-			http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+			writeErrorHttp(w, NewError(
+				ErrBadRequest,
+				err.Error(),
+			))
 			return
 		}
 		qr.Recycle = recycle
@@ -84,8 +91,7 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 
 	err = h.messageQueue.Create(qr)
 	if err != nil {
-		log.Printf("create error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		writeErrorHttp(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -99,15 +105,14 @@ func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request) {
 
 	id, data, err := h.messageQueue.Pop(key)
 	if err != nil {
-		if err.Error() == queue.ErrNone {
-			http.Error(w, "404 Not Found!", http.StatusNotFound)
-		} else {
-			http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
-		}
+		writeErrorHttp(w, err)
 		return
 	}
 	if len(data) <= 0 {
-		http.Error(w, "404 Not Found!", http.StatusNotFound)
+		writeErrorHttp(w, NewError(
+			ErrNone,
+			err.Error(),
+		))
 		return
 	} else {
 		w.Header().Set("Content-Type", "text/plain")
@@ -124,14 +129,16 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		writeErrorHttp(w, NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 		return
 	}
 
 	err = h.messageQueue.Push(t, data)
 	if err != nil {
-		log.Printf("push error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		writeErrorHttp(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -141,15 +148,17 @@ func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request) {
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		writeErrorHttp(w, NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 		return
 	}
 	key := string(data)
 
 	err = h.messageQueue.Confirm(key)
 	if err != nil {
-		log.Printf("confirm error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		writeErrorHttp(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -159,7 +168,10 @@ func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request) {
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		writeErrorHttp(w, NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 		return
 	}
 
@@ -168,8 +180,10 @@ func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request) {
 	hqr := new(HttpQueueRequest)
 	err = json.Unmarshal(data, hqr)
 	if err != nil {
-		log.Printf("empty error: %s", err)
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		writeErrorHttp(w, NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 		return
 	}
 
@@ -178,8 +192,7 @@ func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request) {
 	qr.LineName = hqr.LineName
 	err = h.messageQueue.Empty(qr)
 	if err != nil {
-		log.Printf("empty error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		writeErrorHttp(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -206,4 +219,17 @@ func (h *HttpEntry) Stop() {
 	log.Printf("http entry stoping...")
 	h.stopListener.Stop()
 	h.messageQueue.Close()
+}
+
+func writeErrorHttp(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+	switch e := err.(type) {
+	case *Error:
+		e.WriteTo(w)
+	default:
+		log.Printf("unexpected error: %v", err)
+		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+	}
 }

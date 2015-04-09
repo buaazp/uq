@@ -17,7 +17,7 @@ var port, testCount, concurrency, dataSize, bucket int
 
 func init() {
 	flag.StringVar(&host, "h", "127.0.0.1", "hostname")
-	flag.IntVar(&port, "p", 11211, "port")
+	flag.IntVar(&port, "p", 8808, "port")
 	flag.IntVar(&concurrency, "c", 10, "concurrency level")
 	flag.IntVar(&testCount, "n", 10000, "test count")
 	flag.IntVar(&dataSize, "d", 200, "data size")

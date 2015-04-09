@@ -5,6 +5,23 @@ import (
 	"strings"
 )
 
+var (
+	intMap = make(map[int]string)
+)
+
+func init() {
+	for i := -99; i < 1000; i++ {
+		intMap[i] = strconv.Itoa(i)
+	}
+}
+
+func ItoaQuick(i int) string {
+	if i > -100 && i < 1000 {
+		return intMap[i]
+	}
+	return strconv.Itoa(i)
+}
+
 func Acatui(str, b string, n uint64) string {
 	ns := strconv.FormatUint(n, 10)
 	return str + b + ns

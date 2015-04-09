@@ -11,6 +11,7 @@ import (
 
 	"github.com/buaazp/uq/queue"
 	"github.com/buaazp/uq/store"
+	. "github.com/buaazp/uq/utils"
 )
 
 var (
@@ -40,7 +41,7 @@ func main() {
 	}
 
 	var messageQueue queue.MessageQueue
-	messageQueue, err = queue.NewUnitedQueue(storage, "", 0, nil)
+	messageQueue, err = queue.NewUnitedQueue(storage, "", 0, nil, "uq")
 	if err != nil {
 		fmt.Printf("queue init error: %s\n", err)
 		return
@@ -50,9 +51,11 @@ func main() {
 	qr.TopicName = *topic
 	qr.LineName = "x"
 	err = messageQueue.Create(qr)
-	if err != nil && err.Error() != queue.ErrLineExisted {
-		fmt.Printf("line create error: %s\n", err)
-		return
+	if err != nil {
+		if e := err.(*Error); e.ErrorCode != ErrLineExisted {
+			fmt.Printf("line create error: %s\n", err)
+			return
+		}
 	}
 	line := *topic + "/x"
 	log.Printf("line: %s", line)

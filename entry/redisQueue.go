@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/buaazp/uq/queue"
+	. "github.com/buaazp/uq/utils"
 )
 
 func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
@@ -20,14 +21,20 @@ func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 		if arg != "" {
 			recycle, err := time.ParseDuration(arg)
 			if err != nil {
-				return ErrorReply(err)
+				return ErrorReply(NewError(
+					ErrBadRequest,
+					err.Error(),
+				))
 			}
 			qr.Recycle = recycle
 		}
 	} else if len(parts) == 1 {
 		qr.TopicName = parts[0]
 	} else {
-		return ErrorReply("ERR bad key format '" + key + "'")
+		return ErrorReply(NewError(
+			ErrBadKey,
+			`key parts error: `+ItoaQuick(len(parts)),
+		))
 	}
 
 	err := r.messageQueue.Create(qr)
@@ -41,7 +48,10 @@ func (r *RedisEntry) OnQpush(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 	val, err := cmd.ArgAtIndex(2)
 	if err != nil {
-		return ErrorReply(err)
+		return ErrorReply(NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 	}
 
 	err = r.messageQueue.Push(key, val)
@@ -82,7 +92,10 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 	n, err := cmd.IntAtIndex(2)
 	if err != nil {
-		return ErrorReply(err)
+		return ErrorReply(NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 	}
 
 	ids, values, err := r.messageQueue.MultiPop(key, n)
@@ -123,7 +136,10 @@ func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
 	for i := 2; i < cmd.Len(); i++ {
 		ids[i-2], err = cmd.Uint64AtIndex(i)
 		if err != nil {
-			return ErrorReply(err)
+			return ErrorReply(NewError(
+				ErrBadRequest,
+				err.Error(),
+			))
 		}
 	}
 	// log.Printf("key: %s ids: %v", key, ids)
@@ -148,7 +164,10 @@ func (r *RedisEntry) OnQempty(cmd *Command) *Reply {
 	} else if len(parts) == 1 {
 		qr.TopicName = parts[0]
 	} else {
-		return ErrorReply("ERR bad key format '" + key + "'")
+		return ErrorReply(NewError(
+			ErrBadKey,
+			`key parts error: `+ItoaQuick(len(parts)),
+		))
 	}
 
 	err := r.messageQueue.Empty(qr)
