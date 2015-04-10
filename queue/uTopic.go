@@ -265,6 +265,13 @@ func (t *topic) mPush(datas [][]byte) error {
 
 	oldTail := t.tail
 	for _, data := range datas {
+		if len(data) <= 0 {
+			return NewError(
+				ErrBadRequest,
+				`message has no content`,
+			)
+		}
+
 		key := Acatui(t.name, ":", t.tail)
 		err := t.q.setData(key, data)
 		if err != nil {
@@ -344,6 +351,45 @@ func (t *topic) mConfirm(name string, ids []uint64) (int, error) {
 	return l.mConfirm(ids)
 }
 
+func (t *topic) emptyLine(name string) error {
+	t.linesLock.RLock()
+	l, ok := t.lines[name]
+	t.linesLock.RUnlock()
+	if !ok {
+		log.Printf("line[%s] not existed.", name)
+		return NewError(
+			ErrLineNotExisted,
+			`topic emptyLine`,
+		)
+	}
+
+	return l.empty()
+}
+
+func (t *topic) empty() error {
+	t.linesLock.RLock()
+	defer t.linesLock.RUnlock()
+
+	for name, l := range t.lines {
+		err := l.empty()
+		if err != nil {
+			log.Printf("line[%s] empty error: %s", name, err)
+			return err
+		}
+	}
+
+	t.headLock.Lock()
+	defer t.headLock.Unlock()
+	t.head = t.tail
+	err := t.exportHead()
+	if err != nil {
+		return err
+	}
+
+	log.Printf("topic[%s] empty succ", t.name)
+	return nil
+}
+
 func (t *topic) getData(id uint64) ([]byte, error) {
 	key := Acatui(t.name, ":", id)
 	return t.q.getData(key)
@@ -406,7 +452,7 @@ func (t *topic) clean() (quit bool) {
 
 	defer func() {
 		if t.head != starting {
-			log.Printf("garbage[%d - %d] are cleaned", starting, t.head)
+			log.Printf("garbage[%d - %d] are cleaned", starting, t.head-1)
 		}
 	}()
 
@@ -468,43 +514,4 @@ func (t *topic) getEnd() uint64 {
 func (t *topic) close() {
 	close(t.quit)
 	t.wg.Wait()
-}
-
-func (t *topic) emptyLine(name string) error {
-	t.linesLock.RLock()
-	l, ok := t.lines[name]
-	t.linesLock.RUnlock()
-	if !ok {
-		log.Printf("line[%s] not existed.", name)
-		return NewError(
-			ErrLineNotExisted,
-			`topic emptyLine`,
-		)
-	}
-
-	return l.empty()
-}
-
-func (t *topic) empty() error {
-	t.linesLock.RLock()
-	defer t.linesLock.RUnlock()
-
-	for name, l := range t.lines {
-		err := l.empty()
-		if err != nil {
-			log.Printf("line[%s] empty error: %s", name, err)
-			return err
-		}
-	}
-
-	t.headLock.Lock()
-	defer t.headLock.Unlock()
-	t.head = t.tail
-	err := t.exportHead()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("topic[%s] empty succ", t.name)
-	return nil
 }

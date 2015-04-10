@@ -8,7 +8,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/buaazp/uq/queue"
 	. "github.com/buaazp/uq/utils"
@@ -272,21 +271,20 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			writeErrorMc(resp, err)
 			return
 		}
-		if len(data) > 0 {
-			itemMsg := new(Item)
-			itemMsg.Body = data
-			items := make(map[string]*Item)
-			items[key] = itemMsg
 
-			if len(req.Keys) > 1 {
-				keyID := req.Keys[1]
-				itemID := new(Item)
-				itemID.Body = []byte(Acatui(key, "/", id))
-				items[keyID] = itemID
-			}
+		itemMsg := new(Item)
+		itemMsg.Body = data
+		items := make(map[string]*Item)
+		items[key] = itemMsg
 
-			resp.items = items
+		if len(req.Keys) > 1 {
+			keyID := req.Keys[1]
+			itemID := new(Item)
+			itemID.Body = []byte(Acatui(key, "/", id))
+			items[keyID] = itemID
 		}
+
+		resp.items = items
 
 	case "add":
 		key := req.Keys[0]
@@ -296,18 +294,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		if len(parts) == 2 {
 			qr.TopicName = parts[0]
 			qr.LineName = parts[1]
-			if len(req.Item.Body) > 0 {
-				data := string(req.Item.Body)
-				recycle, err := time.ParseDuration(data)
-				if err != nil {
-					writeErrorMc(resp, NewError(
-						ErrBadRequest,
-						err.Error(),
-					))
-					return
-				}
-				qr.Recycle = recycle
-			}
+			qr.Recycle = string(req.Item.Body)
 		} else if len(parts) == 1 {
 			qr.TopicName = parts[0]
 		} else {

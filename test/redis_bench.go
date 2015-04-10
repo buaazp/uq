@@ -162,8 +162,12 @@ func getTestSingle(ch chan bool, cn, n int) error {
 			// fmt.Printf("redis.strings %v\n", v)
 			end := time.Now()
 			duration := end.Sub(start).Seconds()
-			id := uint64(rpl[0].(int64))
-			log.Printf("get succ: %d spend: %.3fms", id, duration*1000)
+			id, err := redis.String(rpl[1], err)
+			if err != nil {
+				fmt.Printf("redis.string error: c%d %v\n", cn, err)
+				return err
+			}
+			log.Printf("get succ: %s spend: %.3fms", id, duration*1000)
 		}
 	}
 	ch <- true

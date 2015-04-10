@@ -3,7 +3,6 @@ package entry
 import (
 	"log"
 	"strings"
-	"time"
 
 	"github.com/buaazp/uq/queue"
 	. "github.com/buaazp/uq/utils"
@@ -18,16 +17,7 @@ func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 	if len(parts) == 2 {
 		qr.TopicName = parts[0]
 		qr.LineName = parts[1]
-		if arg != "" {
-			recycle, err := time.ParseDuration(arg)
-			if err != nil {
-				return ErrorReply(NewError(
-					ErrBadRequest,
-					err.Error(),
-				))
-			}
-			qr.Recycle = recycle
-		}
+		qr.Recycle = arg
 	} else if len(parts) == 1 {
 		qr.TopicName = parts[0]
 	} else {
@@ -82,8 +72,8 @@ func (r *RedisEntry) OnQpop(cmd *Command) *Reply {
 	}
 
 	vals := make([]interface{}, 2)
-	vals[0] = id
-	vals[1] = value
+	vals[0] = value
+	vals[1] = Acatui(key, "/", id)
 
 	return MultiBulksReply(vals)
 }
@@ -107,10 +97,10 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 
 	vals := make([]interface{}, np*2)
 	for i, index := 0, 0; i < np; i++ {
-		vals[index] = ids[i]
+		vals[index] = values[i]
 		index++
 
-		vals[index] = values[i]
+		vals[index] = Acatui(key, "/", ids[i])
 		index++
 	}
 
@@ -156,21 +146,7 @@ func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
 func (r *RedisEntry) OnQempty(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 
-	qr := new(queue.QueueRequest)
-	parts := strings.Split(key, "/")
-	if len(parts) == 2 {
-		qr.TopicName = parts[0]
-		qr.LineName = parts[1]
-	} else if len(parts) == 1 {
-		qr.TopicName = parts[0]
-	} else {
-		return ErrorReply(NewError(
-			ErrBadKey,
-			`key parts error: `+ItoaQuick(len(parts)),
-		))
-	}
-
-	err := r.messageQueue.Empty(qr)
+	err := r.messageQueue.Empty(key)
 	if err != nil {
 		return ErrorReply(err)
 	}

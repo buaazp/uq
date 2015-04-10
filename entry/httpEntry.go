@@ -6,42 +6,36 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strconv"
-	"time"
+	"strings"
 
 	"github.com/buaazp/uq/queue"
 	. "github.com/buaazp/uq/utils"
-	"github.com/gorilla/mux"
 )
 
 type HttpEntry struct {
 	host         string
 	port         int
+	mux          map[string]func(http.ResponseWriter, *http.Request, string)
 	server       *http.Server
 	stopListener *StopListener
 	messageQueue queue.MessageQueue
 }
 
-type HttpQueueRequest struct {
-	TopicName string `json:"topic"`
-	LineName  string `json:"line,omitempty"`
-	Recycle   string `json:"recycle,omitempty"`
-}
-
 func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*HttpEntry, error) {
 	h := new(HttpEntry)
 
-	router := mux.NewRouter()
-	router.HandleFunc("/add", h.addHandler).Methods("POST")
-	router.HandleFunc("/pop/{topic}/{line}", h.popHandler).Methods("GET")
-	router.HandleFunc("/push/{topic}", h.pushHandler).Methods("POST")
-	router.HandleFunc("/del", h.delHandler).Methods("POST")
-	router.HandleFunc("/empty", h.emptyHandler).Methods("POST")
+	h.mux = map[string]func(http.ResponseWriter, *http.Request, string){
+		"/add":   h.addHandler,
+		"/push":  h.pushHandler,
+		"/pop":   h.popHandler,
+		"/del":   h.delHandler,
+		"/empty": h.emptyHandler,
+	}
 
 	addr := Addrcat(host, port)
 	server := new(http.Server)
 	server.Addr = addr
-	server.Handler = router
+	server.Handler = h
 
 	h.host = host
 	h.port = port
@@ -51,7 +45,40 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	return h, nil
 }
 
-func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
+func (h *HttpEntry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	for prefix, handler := range h.mux {
+		if strings.HasPrefix(req.URL.Path, prefix) {
+			key := req.URL.Path[len(prefix):]
+			key = strings.TrimPrefix(key, "/")
+			key = strings.TrimSuffix(key, "/")
+			handler(w, req, key)
+			return
+		}
+	}
+
+	http.Error(w, "404 Not Found!", http.StatusNotFound)
+	return
+}
+
+// allowMethod verifies that the given method is one of the allowed methods,
+// and if not, it writes an error to w.  A boolean is returned indicating
+// whether or not the method is allowed.
+func allowMethod(w http.ResponseWriter, m string, ms ...string) bool {
+	for _, meth := range ms {
+		if m == meth {
+			return true
+		}
+	}
+	w.Header().Set("Allow", strings.Join(ms, ","))
+	http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	return false
+}
+
+func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "PUT", "POST") {
+		return
+	}
+
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
 	if err != nil {
@@ -64,29 +91,14 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 
 	// Use test/genHttpJsonReq.go to generate json string
 	// len = 47 json: {"topic":"foo","line":"x","recycle":"1h10m30s"}
-	hqr := new(HttpQueueRequest)
-	err = json.Unmarshal(data, hqr)
+	qr := new(queue.QueueRequest)
+	err = json.Unmarshal(data, qr)
 	if err != nil {
 		writeErrorHttp(w, NewError(
 			ErrBadRequest,
 			err.Error(),
 		))
 		return
-	}
-
-	qr := new(queue.QueueRequest)
-	qr.TopicName = hqr.TopicName
-	qr.LineName = hqr.LineName
-	if hqr.Recycle != "" {
-		recycle, err := time.ParseDuration(hqr.Recycle)
-		if err != nil {
-			writeErrorHttp(w, NewError(
-				ErrBadRequest,
-				err.Error(),
-			))
-			return
-		}
-		qr.Recycle = recycle
 	}
 
 	err = h.messageQueue.Create(qr)
@@ -97,34 +109,27 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request) {
-	vars := mux.Vars(req)
-	t := vars["topic"]
-	l := vars["line"]
-	key := t + "/" + l
+func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "HEAD", "GET") {
+		return
+	}
 
 	id, data, err := h.messageQueue.Pop(key)
 	if err != nil {
 		writeErrorHttp(w, err)
 		return
 	}
-	if len(data) <= 0 {
-		writeErrorHttp(w, NewError(
-			ErrNone,
-			err.Error(),
-		))
-		return
-	} else {
-		w.Header().Set("Content-Type", "text/plain")
-		w.Header().Set("X-UQ-MessageID", strconv.FormatUint(id, 10))
-		w.WriteHeader(http.StatusOK)
-		w.Write(data)
-	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("X-UQ-ID", Acatui(key, "/", id))
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
 }
 
-func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
-	vars := mux.Vars(req)
-	t := vars["topic"]
+func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "PUT", "POST") {
+		return
+	}
 
 	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
 	data, err := ioutil.ReadAll(limitedr)
@@ -136,7 +141,7 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = h.messageQueue.Push(t, data)
+	err = h.messageQueue.Push(key, data)
 	if err != nil {
 		writeErrorHttp(w, err)
 		return
@@ -144,19 +149,12 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request) {
-	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
-	data, err := ioutil.ReadAll(limitedr)
-	if err != nil {
-		writeErrorHttp(w, NewError(
-			ErrBadRequest,
-			err.Error(),
-		))
+func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "DELETE") {
 		return
 	}
-	key := string(data)
 
-	err = h.messageQueue.Confirm(key)
+	err := h.messageQueue.Confirm(key)
 	if err != nil {
 		writeErrorHttp(w, err)
 		return
@@ -164,33 +162,12 @@ func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request) {
-	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
-	data, err := ioutil.ReadAll(limitedr)
-	if err != nil {
-		writeErrorHttp(w, NewError(
-			ErrBadRequest,
-			err.Error(),
-		))
+func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "DELETE") {
 		return
 	}
 
-	// Use test/genHttpJsonReq.go to generate json string
-	// len = 55 json: {"TopicName":"foo","LineName":"x","Recycle":"1h10m30s"}
-	hqr := new(HttpQueueRequest)
-	err = json.Unmarshal(data, hqr)
-	if err != nil {
-		writeErrorHttp(w, NewError(
-			ErrBadRequest,
-			err.Error(),
-		))
-		return
-	}
-
-	qr := new(queue.QueueRequest)
-	qr.TopicName = hqr.TopicName
-	qr.LineName = hqr.LineName
-	err = h.messageQueue.Empty(qr)
+	err := h.messageQueue.Empty(key)
 	if err != nil {
 		writeErrorHttp(w, err)
 		return

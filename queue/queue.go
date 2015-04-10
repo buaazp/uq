@@ -1,21 +1,19 @@
 package queue
 
-import "time"
-
 type QueueRequest struct {
-	TopicName string
-	LineName  string
-	Recycle   time.Duration
+	TopicName string `json:"topic"`
+	LineName  string `json:"line,omitempty"`
+	Recycle   string `json:"recycle,omitempty"`
 }
 
 type MessageQueue interface {
 	Create(qr *QueueRequest) error
-	Push(name string, data []byte) error
-	MultiPush(name string, datas [][]byte) error
-	Pop(name string) (uint64, []byte, error)
-	MultiPop(name string, n int) ([]uint64, [][]byte, error)
+	Push(key string, data []byte) error
+	MultiPush(key string, datas [][]byte) error
+	Pop(key string) (uint64, []byte, error)
+	MultiPop(key string, n int) ([]uint64, [][]byte, error)
 	Confirm(key string) error
-	MultiConfirm(name string, ids []uint64) (int, error)
-	Empty(qr *QueueRequest) error
+	MultiConfirm(key string, ids []uint64) (int, error)
+	Empty(key string) error
 	Close()
 }
