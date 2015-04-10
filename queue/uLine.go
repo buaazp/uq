@@ -307,6 +307,48 @@ func (l *line) mConfirm(ids []uint64) (int, error) {
 	return confirmed, nil
 }
 
+func (l *line) empty() error {
+	l.inflightLock.Lock()
+	defer l.inflightLock.Unlock()
+	l.inflight.Init()
+	l.imap = make(map[uint64]bool)
+	l.ihead = l.t.getTail()
+
+	l.headLock.Lock()
+	defer l.headLock.Unlock()
+	l.head = l.t.getTail()
+
+	err := l.exportHead()
+	if err != nil {
+		return err
+	}
+
+	log.Printf("line[%s] empty succ", l.name)
+	return nil
+}
+
+func (l *line) stat() (*QueueStat, error) {
+	qs := new(QueueStat)
+	qs.TopicName = l.t.name
+	qs.LineName = l.name
+	qs.Recycle = l.recycle.String()
+
+	l.inflightLock.Lock()
+	qs.IHead = l.ihead
+	inflightLen := uint64(l.inflight.Len())
+	l.inflightLock.Unlock()
+
+	l.headLock.Lock()
+	qs.Head = l.head
+	l.headLock.Unlock()
+
+	qs.Tail = l.t.getTail()
+
+	qs.Count = inflightLen + qs.Tail - qs.Head
+
+	return qs, nil
+}
+
 func (l *line) exportLine() error {
 	// log.Printf("start export line[%s]...", l.name)
 	lineStoreValue, err := l.genLineStore()
@@ -354,24 +396,4 @@ func (l *line) genLineStore() (*lineStore, error) {
 	ls.Inflights = inflights
 	ls.Ihead = l.ihead
 	return ls, nil
-}
-
-func (l *line) empty() error {
-	l.inflightLock.Lock()
-	defer l.inflightLock.Unlock()
-	l.inflight.Init()
-	l.imap = make(map[uint64]bool)
-	l.ihead = l.t.getTail()
-
-	l.headLock.Lock()
-	defer l.headLock.Unlock()
-	l.head = l.t.getTail()
-
-	err := l.exportHead()
-	if err != nil {
-		return err
-	}
-
-	log.Printf("line[%s] empty succ", l.name)
-	return nil
 }

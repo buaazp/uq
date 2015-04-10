@@ -390,6 +390,51 @@ func (t *topic) empty() error {
 	return nil
 }
 
+func (t *topic) statLine(name string) (*QueueStat, error) {
+	t.linesLock.RLock()
+	l, ok := t.lines[name]
+	t.linesLock.RUnlock()
+	if !ok {
+		log.Printf("line[%s] not existed.", name)
+		return nil, NewError(
+			ErrLineNotExisted,
+			`topic statLine`,
+		)
+	}
+
+	return l.stat()
+}
+
+func (t *topic) stat() (*QueueStat, error) {
+	qs := new(QueueStat)
+	qs.TopicName = t.name
+
+	t.linesLock.RLock()
+	qs.Lines = make([]*QueueStat, 0)
+	for name, l := range t.lines {
+		//TODO: print lines
+		ls, err := l.stat()
+		if err != nil {
+			log.Printf("lien[%s] stat error: %s", name, err)
+			continue
+		}
+		qs.Lines = append(qs.Lines, ls)
+	}
+	t.linesLock.RUnlock()
+
+	t.headLock.RLock()
+	qs.Head = t.head
+	t.headLock.RUnlock()
+
+	t.tailLock.RLock()
+	qs.Tail = t.tail
+	t.tailLock.RUnlock()
+
+	qs.Count = qs.Tail - qs.Head
+
+	return qs, nil
+}
+
 func (t *topic) getData(id uint64) ([]byte, error) {
 	key := Acatui(t.name, ":", id)
 	return t.q.getData(key)

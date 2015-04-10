@@ -482,44 +482,62 @@ func (u *UnitedQueue) Empty(key string) error {
 		)
 	}
 
-	if len(parts) == 2 {
-		lineName = parts[1]
-		u.topicsLock.RLock()
-		t, ok := u.topics[topicName]
-		u.topicsLock.RUnlock()
-		if !ok {
-			return NewError(
-				ErrTopicNotExisted,
-				`queue empty`,
-			)
-		}
-
-		err = t.emptyLine(lineName)
-		if err != nil {
-			log.Printf("empty line[%s] error: %s", lineName, err)
-		}
-	} else {
-		err = u.emptyTopic(topicName)
-		if err != nil {
-			log.Printf("empty topic[%s] error: %s", topicName, err)
-		}
-	}
-
-	return err
-}
-
-func (u *UnitedQueue) emptyTopic(name string) error {
 	u.topicsLock.RLock()
-	t, ok := u.topics[name]
+	t, ok := u.topics[topicName]
 	u.topicsLock.RUnlock()
 	if !ok {
 		return NewError(
 			ErrTopicNotExisted,
-			`queue emptyTopic`,
+			`queue empty`,
 		)
 	}
 
+	if len(parts) == 2 {
+		lineName = parts[1]
+		err = t.emptyLine(lineName)
+		if err != nil {
+			log.Printf("empty line[%s] error: %s", lineName, err)
+		}
+		return err
+	}
+
 	return t.empty()
+}
+
+func (u *UnitedQueue) Stat(key string) (*QueueStat, error) {
+	var topicName, lineName string
+	parts := strings.Split(key, "/")
+	if len(parts) < 1 || len(parts) > 2 {
+		return nil, NewError(
+			ErrBadKey,
+			`empty key parts error: `+ItoaQuick(len(parts)),
+		)
+	}
+
+	topicName = parts[0]
+	if topicName == "" {
+		return nil, NewError(
+			ErrBadKey,
+			`stat topic is nil`,
+		)
+	}
+
+	u.topicsLock.RLock()
+	t, ok := u.topics[topicName]
+	u.topicsLock.RUnlock()
+	if !ok {
+		return nil, NewError(
+			ErrTopicNotExisted,
+			`queue stat`,
+		)
+	}
+
+	if len(parts) == 2 {
+		lineName = parts[1]
+		return t.statLine(lineName)
+	}
+
+	return t.stat()
 }
 
 func (u *UnitedQueue) setData(key string, data []byte) error {

@@ -6,6 +6,17 @@ type QueueRequest struct {
 	Recycle   string `json:"recycle,omitempty"`
 }
 
+type QueueStat struct {
+	TopicName string       `json:"topic"`
+	Lines     []*QueueStat `json:"lines,omitempty"`
+	LineName  string       `json:"line,omitempty"`
+	Recycle   string       `json:"recycle,omitempty"`
+	Head      uint64       `json:"head"`
+	IHead     uint64       `json:"ihead"`
+	Tail      uint64       `json:"tail"`
+	Count     uint64       `json:"count"`
+}
+
 type MessageQueue interface {
 	Create(qr *QueueRequest) error
 	Push(key string, data []byte) error
@@ -15,5 +26,6 @@ type MessageQueue interface {
 	Confirm(key string) error
 	MultiConfirm(key string, ids []uint64) (int, error)
 	Empty(key string) error
+	Stat(key string) (*QueueStat, error)
 	Close()
 }

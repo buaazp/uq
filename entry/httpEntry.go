@@ -30,6 +30,7 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 		"/pop":   h.popHandler,
 		"/del":   h.delHandler,
 		"/empty": h.emptyHandler,
+		"/stat":  h.statHandler,
 	}
 
 	addr := Addrcat(host, port)
@@ -173,6 +174,31 @@ func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request, key s
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "HEAD", "GET") {
+		return
+	}
+
+	qs, err := h.messageQueue.Stat(key)
+	if err != nil {
+		writeErrorHttp(w, err)
+		return
+	}
+
+	data, err := json.Marshal(qs)
+	if err != nil {
+		writeErrorHttp(w, NewError(
+			ErrInternalError,
+			err.Error(),
+		))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
 }
 
 func (h *HttpEntry) ListenAndServe() error {
