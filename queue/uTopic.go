@@ -392,7 +392,8 @@ func (t *topic) statLine(name string) (*QueueStat, error) {
 
 func (t *topic) stat() (*QueueStat, error) {
 	qs := new(QueueStat)
-	qs.TopicName = t.name
+	qs.Name = t.name
+	qs.Type = "topic"
 
 	t.linesLock.RLock()
 	qs.Lines = make([]*QueueStat, 0)
@@ -482,7 +483,7 @@ func (t *topic) clean() (quit bool) {
 
 	defer func() {
 		if t.head != starting {
-			log.Printf("garbage[%d - %d] are cleaned", starting, t.head-1)
+			log.Printf("topic[%s] garbage[%d - %d] are cleaned", t.name, starting, t.head-1)
 		}
 	}()
 

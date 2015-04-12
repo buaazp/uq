@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	. "github.com/buaazp/uq/utils"
 )
 
 type Command struct {
@@ -112,12 +114,12 @@ func (cmd *Command) Bytes() []byte {
 	buf := bytes.Buffer{}
 	buf.WriteByte('*')
 	argCount := cmd.Len()
-	buf.WriteString(itoa(argCount)) //<number of arguments>
+	buf.WriteString(ItoaQuick(argCount)) //<number of arguments>
 	buf.WriteString(CRLF)
 	for i := 0; i < argCount; i++ {
 		buf.WriteByte('$')
 		argSize := len(cmd.args[i])
-		buf.WriteString(itoa(argSize)) //<number of bytes of argument i>
+		buf.WriteString(ItoaQuick(argSize)) //<number of bytes of argument i>
 		buf.WriteString(CRLF)
 		buf.Write(cmd.args[i]) //<argument data>
 		buf.WriteString(CRLF)

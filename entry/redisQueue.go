@@ -130,3 +130,31 @@ func (r *RedisEntry) OnQempty(cmd *Command) *Reply {
 	}
 	return StatusReply("OK")
 }
+
+func (r *RedisEntry) OnInfo(cmd *Command) *Reply {
+	key := cmd.StringAtIndex(1)
+
+	qs, err := r.messageQueue.Stat(key)
+	if err != nil {
+		return ErrorReply(err)
+	}
+
+	// for humen reading
+	// strs := qs.ToStrings()
+	// vals := make([]interface{}, len(strs))
+	// for i, str := range strs {
+	// 	vals[i] = str
+	// }
+	// return MultiBulksReply(vals)
+
+	// for json format
+	data, err := qs.ToJson()
+	if err != nil {
+		return ErrorReply(NewError(
+			ErrInternalError,
+			err.Error(),
+		))
+	}
+
+	return StatusReply(string(data))
+}

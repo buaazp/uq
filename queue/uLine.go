@@ -286,8 +286,8 @@ func (l *line) empty() error {
 
 func (l *line) stat() (*QueueStat, error) {
 	qs := new(QueueStat)
-	qs.TopicName = l.t.name
-	qs.LineName = l.name
+	qs.Name = l.t.name + "/" + l.name
+	qs.Type = "line"
 	qs.Recycle = l.recycle.String()
 
 	l.inflightLock.Lock()

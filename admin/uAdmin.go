@@ -1,6 +1,7 @@
-package entry
+package admin
 
 import (
+	// "encoding/json"
 	"log"
 	"net"
 	"net/http"
@@ -10,7 +11,7 @@ import (
 	. "github.com/buaazp/uq/utils"
 )
 
-type HttpEntry struct {
+type UqAdminServer struct {
 	host         string
 	port         int
 	mux          map[string]func(http.ResponseWriter, *http.Request, string)
@@ -19,8 +20,8 @@ type HttpEntry struct {
 	messageQueue queue.MessageQueue
 }
 
-func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*HttpEntry, error) {
-	h := new(HttpEntry)
+func NewUqAdminServer(host string, port int, messageQueue queue.MessageQueue) (*UqAdminServer, error) {
+	h := new(UqAdminServer)
 
 	h.mux = map[string]func(http.ResponseWriter, *http.Request, string){
 		"/add":   h.addHandler,
@@ -44,7 +45,7 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	return h, nil
 }
 
-func (h *HttpEntry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (h *UqAdminServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for prefix, handler := range h.mux {
 		if strings.HasPrefix(req.URL.Path, prefix) {
 			key := req.URL.Path[len(prefix):]
@@ -71,7 +72,7 @@ func allowMethod(w http.ResponseWriter, m string, ms ...string) bool {
 	return false
 }
 
-func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key string) {
+func (h *UqAdminServer) addHandler(w http.ResponseWriter, req *http.Request, key string) {
 	if !allowMethod(w, req.Method, "PUT", "POST") {
 		return
 	}
@@ -99,7 +100,7 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key str
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key string) {
+func (h *UqAdminServer) pushHandler(w http.ResponseWriter, req *http.Request, key string) {
 	if !allowMethod(w, req.Method, "PUT", "POST") {
 		return
 	}
@@ -122,7 +123,7 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key st
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key string) {
+func (h *UqAdminServer) popHandler(w http.ResponseWriter, req *http.Request, key string) {
 	if !allowMethod(w, req.Method, "HEAD", "GET") {
 		return
 	}
@@ -139,7 +140,7 @@ func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key str
 	w.Write(data)
 }
 
-func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key string) {
+func (h *UqAdminServer) delHandler(w http.ResponseWriter, req *http.Request, key string) {
 	if !allowMethod(w, req.Method, "DELETE") {
 		return
 	}
@@ -152,7 +153,7 @@ func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key str
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request, key string) {
+func (h *UqAdminServer) emptyHandler(w http.ResponseWriter, req *http.Request, key string) {
 	if !allowMethod(w, req.Method, "DELETE") {
 		return
 	}
@@ -165,7 +166,7 @@ func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request, key s
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key string) {
+func (h *UqAdminServer) statHandler(w http.ResponseWriter, req *http.Request, key string) {
 	if !allowMethod(w, req.Method, "HEAD", "GET") {
 		return
 	}
@@ -190,7 +191,7 @@ func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key st
 	w.Write(data)
 }
 
-func (h *HttpEntry) ListenAndServe() error {
+func (h *UqAdminServer) ListenAndServe() error {
 	addr := Addrcat(h.host, h.port)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -203,14 +204,13 @@ func (h *HttpEntry) ListenAndServe() error {
 	}
 	h.stopListener = stopListener
 
-	log.Printf("http entrance serving at %s...", addr)
+	log.Printf("admin server serving at %s...", addr)
 	return h.server.Serve(h.stopListener)
 }
 
-func (h *HttpEntry) Stop() {
-	log.Printf("http entry stoping...")
+func (h *UqAdminServer) Stop() {
+	log.Printf("admin server stoping...")
 	h.stopListener.Stop()
-	h.messageQueue.Close()
 }
 
 func writeErrorHttp(w http.ResponseWriter, err error) {

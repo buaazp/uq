@@ -115,22 +115,24 @@ func (r *RedisEntry) Process(session *Session, cmd *Command) (reply *Reply) {
 func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Reply) {
 	cmdName := cmd.Name()
 
-	if cmdName == "QADD" {
+	if cmdName == "ADD" || cmdName == "QADD" {
 		reply = r.OnQadd(cmd)
-	} else if cmdName == "QPUSH" {
+	} else if cmdName == "SET" || cmdName == "QPUSH" {
 		reply = r.OnQpush(cmd)
-	} else if cmdName == "QMPUSH" {
+	} else if cmdName == "MSET" || cmdName == "QMPUSH" {
 		reply = r.OnQmpush(cmd)
-	} else if cmdName == "QPOP" {
+	} else if cmdName == "GET" || cmdName == "QPOP" {
 		reply = r.OnQpop(cmd)
-	} else if cmdName == "QMPOP" {
+	} else if cmdName == "MGET" || cmdName == "QMPOP" {
 		reply = r.OnQmpop(cmd)
-	} else if cmdName == "QDEL" {
+	} else if cmdName == "DEL" || cmdName == "QDEL" {
 		reply = r.OnQdel(cmd)
-	} else if cmdName == "QMDEL" {
+	} else if cmdName == "MDEL" || cmdName == "QMDEL" {
 		reply = r.OnQmdel(cmd)
-	} else if cmdName == "QEMPTY" {
+	} else if cmdName == "EMPTY" || cmdName == "QEMPTY" {
 		reply = r.OnQempty(cmd)
+	} else if cmdName == "INFO" || cmdName == "QINFO" {
+		reply = r.OnInfo(cmd)
 	} else {
 		reply = r.OnUndefined(session, cmd)
 	}

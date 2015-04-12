@@ -138,7 +138,7 @@ func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
 	req := new(Request)
 	req.Cmd = parts[0]
 	switch req.Cmd {
-	case "get", "gets":
+	case "get", "gets", "stats":
 		if len(parts) < 2 {
 			return nil, NewError(
 				ErrBadRequest,
@@ -227,7 +227,6 @@ func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
 	case "quit", "version", "flush_all":
 	case "replace", "cas", "append", "prepend":
 	case "incr", "decr":
-	case "stats":
 	case "verbosity":
 
 	default:
@@ -285,6 +284,30 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		}
 
 		resp.items = items
+
+	case "stats":
+		key := req.Keys[0]
+		resp.status = "STAT"
+		qs, err := m.messageQueue.Stat(key)
+		if err != nil {
+			writeErrorMc(resp, err)
+			return
+		}
+
+		// for humen reading
+		// resp.msg = qs.ToString()
+
+		// for json format
+		data, err := qs.ToJson()
+		if err != nil {
+			writeErrorMc(resp, NewError(
+				ErrInternalError,
+				err.Error(),
+			))
+			return
+		}
+
+		resp.msg = string(data)
 
 	case "add":
 		key := req.Keys[0]
@@ -371,6 +394,7 @@ func (resp *Response) Write(w io.Writer) error {
 
 	case "STAT":
 		io.WriteString(w, resp.msg)
+		io.WriteString(w, "\r\n")
 		io.WriteString(w, "END\r\n")
 
 	default:
