@@ -264,49 +264,6 @@ func (l *line) updateiHead() {
 	}
 }
 
-func (l *line) mConfirm(ids []uint64) (int, error) {
-	if l.recycle == 0 {
-		return 0, NewError(
-			ErrNotDelivered,
-			`line mConfirm`,
-		)
-	}
-
-	l.headLock.RLock()
-	head := l.head
-	l.headLock.RUnlock()
-
-	l.inflightLock.Lock()
-	defer l.inflightLock.Unlock()
-
-	var confirmed int = 0
-	for _, id := range ids {
-		if id >= head {
-			log.Printf("ID[%d] is Not Delivered", id)
-			continue
-		}
-
-		for m := l.inflight.Front(); m != nil; m = m.Next() {
-			msg := m.Value.(*inflightMessage)
-			if msg.Tid == id {
-				l.inflight.Remove(m)
-				log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
-				l.imap[id] = false
-				l.updateiHead()
-				confirmed++
-			}
-		}
-	}
-
-	if confirmed == 0 {
-		return 0, NewError(
-			ErrNotDelivered,
-			`line mConfirm`,
-		)
-	}
-	return confirmed, nil
-}
-
 func (l *line) empty() error {
 	l.inflightLock.Lock()
 	defer l.inflightLock.Unlock()

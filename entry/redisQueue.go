@@ -2,32 +2,16 @@ package entry
 
 import (
 	"log"
-	"strings"
 
-	"github.com/buaazp/uq/queue"
 	. "github.com/buaazp/uq/utils"
 )
 
 func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
-	arg := cmd.StringAtIndex(2)
+	recycle := cmd.StringAtIndex(2)
 
-	qr := new(queue.QueueRequest)
-	parts := strings.Split(key, "/")
-	if len(parts) == 2 {
-		qr.TopicName = parts[0]
-		qr.LineName = parts[1]
-		qr.Recycle = arg
-	} else if len(parts) == 1 {
-		qr.TopicName = parts[0]
-	} else {
-		return ErrorReply(NewError(
-			ErrBadKey,
-			`key parts error: `+ItoaQuick(len(parts)),
-		))
-	}
-
-	err := r.messageQueue.Create(qr)
+	log.Printf("creating... %s %s", key, recycle)
+	err := r.messageQueue.Create(key, recycle)
 	if err != nil {
 		return ErrorReply(err)
 	}
@@ -73,7 +57,7 @@ func (r *RedisEntry) OnQpop(cmd *Command) *Reply {
 
 	vals := make([]interface{}, 2)
 	vals[0] = value
-	vals[1] = Acatui(key, "/", id)
+	vals[1] = id
 
 	return MultiBulksReply(vals)
 }
@@ -100,7 +84,7 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 		vals[index] = values[i]
 		index++
 
-		vals[index] = Acatui(key, "/", ids[i])
+		vals[index] = ids[i]
 		index++
 	}
 
@@ -120,27 +104,21 @@ func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
 }
 
 func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
-	var err error
-	key := cmd.StringAtIndex(1)
-	ids := make([]uint64, cmd.Len()-2)
-	for i := 2; i < cmd.Len(); i++ {
-		ids[i-2], err = cmd.Uint64AtIndex(i)
+	keys := cmd.StringArgs()[1:]
+	log.Printf("keys: %v", keys)
+
+	errs := r.messageQueue.MultiConfirm(keys)
+
+	vals := make([]interface{}, len(errs))
+	for i, err := range errs {
 		if err != nil {
-			return ErrorReply(NewError(
-				ErrBadRequest,
-				err.Error(),
-			))
+			vals[i] = err.Error()
+		} else {
+			vals[i] = "OK"
 		}
 	}
-	// log.Printf("key: %s ids: %v", key, ids)
 
-	n, err := r.messageQueue.MultiConfirm(key, ids)
-	if err != nil {
-		log.Printf("confirm error: %s", err)
-		return ErrorReply(err)
-	}
-
-	return IntegerReply(n)
+	return MultiBulksReply(vals)
 }
 
 func (r *RedisEntry) OnQempty(cmd *Command) *Reply {

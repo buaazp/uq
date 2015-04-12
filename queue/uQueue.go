@@ -160,19 +160,33 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	return t, nil
 }
 
-func (u *UnitedQueue) Create(qr *QueueRequest) error {
-	if qr.TopicName == "" {
+func (u *UnitedQueue) Create(key, rec string) error {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
+	var topicName, lineName string
+	var err error
+	parts := strings.Split(key, "/")
+	if len(parts) < 1 || len(parts) > 2 {
 		return NewError(
 			ErrBadKey,
-			`create topic name is nil`,
+			`create key parts error: `+ItoaQuick(len(parts)),
 		)
 	}
 
-	var err error
-	if qr.LineName != "" {
+	topicName = parts[0]
+	if topicName == "" {
+		return NewError(
+			ErrBadKey,
+			`create topic is nil`,
+		)
+	}
+
+	if len(parts) == 2 {
+		lineName = parts[1]
 		var recycle time.Duration
-		if qr.Recycle != "" {
-			recycle, err = time.ParseDuration(qr.Recycle)
+		if rec != "" {
+			recycle, err = time.ParseDuration(rec)
 			if err != nil {
 				return NewError(
 					ErrBadRequest,
@@ -182,7 +196,7 @@ func (u *UnitedQueue) Create(qr *QueueRequest) error {
 		}
 
 		u.topicsLock.RLock()
-		t, ok := u.topics[qr.TopicName]
+		t, ok := u.topics[topicName]
 		u.topicsLock.RUnlock()
 		if !ok {
 			return NewError(
@@ -191,14 +205,16 @@ func (u *UnitedQueue) Create(qr *QueueRequest) error {
 			)
 		}
 
-		err = t.createLine(qr.LineName, recycle, false)
+		err = t.createLine(lineName, recycle, false)
 		if err != nil {
-			log.Printf("create line[%s] error: %s", qr.LineName, err)
+			log.Printf("create line[%s] error: %s", lineName, err)
+			return err
 		}
 	} else {
-		err = u.createTopic(qr.TopicName, false)
+		err = u.createTopic(topicName, false)
 		if err != nil {
-			log.Printf("create topic[%s] error: %s", qr.TopicName, err)
+			log.Printf("create topic[%s] error: %s", topicName, err)
+			return err
 		}
 	}
 
@@ -313,6 +329,9 @@ func (u *UnitedQueue) genQueueStore() (*unitedQueueStore, error) {
 }
 
 func (u *UnitedQueue) Push(key string, data []byte) error {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
 	if len(data) <= 0 {
 		return NewError(
 			ErrBadRequest,
@@ -334,6 +353,9 @@ func (u *UnitedQueue) Push(key string, data []byte) error {
 }
 
 func (u *UnitedQueue) MultiPush(key string, datas [][]byte) error {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
 	u.topicsLock.RLock()
 	t, ok := u.topics[key]
 	u.topicsLock.RUnlock()
@@ -347,10 +369,13 @@ func (u *UnitedQueue) MultiPush(key string, datas [][]byte) error {
 	return t.mPush(datas)
 }
 
-func (u *UnitedQueue) Pop(key string) (uint64, []byte, error) {
+func (u *UnitedQueue) Pop(key string) (string, []byte, error) {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
 	parts := strings.Split(key, "/")
 	if len(parts) != 2 {
-		return 0, nil, NewError(
+		return "", nil, NewError(
 			ErrBadKey,
 			`pop key parts error: `+ItoaQuick(len(parts)),
 		)
@@ -364,16 +389,24 @@ func (u *UnitedQueue) Pop(key string) (uint64, []byte, error) {
 	u.topicsLock.RUnlock()
 	if !ok {
 		log.Printf("topic[%s] not existed.", tName)
-		return 0, nil, NewError(
+		return "", nil, NewError(
 			ErrTopicNotExisted,
 			`queue pop`,
 		)
 	}
 
-	return t.pop(lName)
+	id, data, err := t.pop(lName)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return Acatui(key, "/", id), data, nil
 }
 
-func (u *UnitedQueue) MultiPop(key string, n int) ([]uint64, [][]byte, error) {
+func (u *UnitedQueue) MultiPop(key string, n int) ([]string, [][]byte, error) {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
 	parts := strings.Split(key, "/")
 	if len(parts) != 2 {
 		return nil, nil, NewError(
@@ -396,10 +429,22 @@ func (u *UnitedQueue) MultiPop(key string, n int) ([]uint64, [][]byte, error) {
 		)
 	}
 
-	return t.mPop(lName, n)
+	ids, datas, err := t.mPop(lName, n)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = Acatui(key, "/", id)
+	}
+	return keys, datas, nil
 }
 
 func (u *UnitedQueue) Confirm(key string) error {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
 	var topicName, lineName string
 	var id uint64
 	var err error
@@ -435,34 +480,18 @@ func (u *UnitedQueue) Confirm(key string) error {
 	return t.confirm(lineName, id)
 }
 
-func (u *UnitedQueue) MultiConfirm(key string, ids []uint64) (int, error) {
-	var topicName, lineName string
-	parts := strings.Split(key, "/")
-	if len(parts) != 2 {
-		return 0, NewError(
-			ErrBadKey,
-			`mConfirm key parts error: `+ItoaQuick(len(parts)),
-		)
-	} else {
-		topicName = parts[0]
-		lineName = parts[1]
+func (u *UnitedQueue) MultiConfirm(keys []string) []error {
+	errs := make([]error, len(keys))
+	for i, key := range keys {
+		errs[i] = u.Confirm(key)
 	}
-
-	u.topicsLock.RLock()
-	t, ok := u.topics[topicName]
-	u.topicsLock.RUnlock()
-	if !ok {
-		log.Printf("topic[%s] not existed.", topicName)
-		return 0, NewError(
-			ErrTopicNotExisted,
-			`queue multiConfirm`,
-		)
-	}
-
-	return t.mConfirm(lineName, ids)
+	return errs
 }
 
 func (u *UnitedQueue) Empty(key string) error {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
 	var topicName, lineName string
 	var err error
 	parts := strings.Split(key, "/")
@@ -505,6 +534,9 @@ func (u *UnitedQueue) Empty(key string) error {
 }
 
 func (u *UnitedQueue) Stat(key string) (*QueueStat, error) {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
 	var topicName, lineName string
 	parts := strings.Split(key, "/")
 	if len(parts) < 1 || len(parts) > 2 {

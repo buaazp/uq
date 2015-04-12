@@ -2,7 +2,6 @@ package entry
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -50,8 +49,6 @@ func (h *HttpEntry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	for prefix, handler := range h.mux {
 		if strings.HasPrefix(req.URL.Path, prefix) {
 			key := req.URL.Path[len(prefix):]
-			key = strings.TrimPrefix(key, "/")
-			key = strings.TrimSuffix(key, "/")
 			handler(w, req, key)
 			return
 		}
@@ -80,29 +77,45 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key str
 		return
 	}
 
-	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
-	data, err := ioutil.ReadAll(limitedr)
+	err := req.ParseForm()
 	if err != nil {
 		writeErrorHttp(w, NewError(
-			ErrBadRequest,
+			ErrInternalError,
 			err.Error(),
 		))
 		return
 	}
 
-	// Use test/genHttpJsonReq.go to generate json string
-	// len = 47 json: {"topic":"foo","line":"x","recycle":"1h10m30s"}
-	qr := new(queue.QueueRequest)
-	err = json.Unmarshal(data, qr)
+	topicName := req.FormValue("topic")
+	lineName := req.FormValue("line")
+	key = topicName + "/" + lineName
+	recycle := req.FormValue("recycle")
+
+	log.Printf("creating... %s %s", key, recycle)
+	err = h.messageQueue.Create(key, recycle)
+	if err != nil {
+		writeErrorHttp(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "PUT", "POST") {
+		return
+	}
+
+	err := req.ParseForm()
 	if err != nil {
 		writeErrorHttp(w, NewError(
-			ErrBadRequest,
+			ErrInternalError,
 			err.Error(),
 		))
 		return
 	}
 
-	err = h.messageQueue.Create(qr)
+	data := []byte(req.FormValue("value"))
+	err = h.messageQueue.Push(key, data)
 	if err != nil {
 		writeErrorHttp(w, err)
 		return
@@ -122,32 +135,9 @@ func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key str
 	}
 
 	w.Header().Set("Content-Type", "text/plain")
-	w.Header().Set("X-UQ-ID", Acatui(key, "/", id))
+	w.Header().Set("X-UQ-ID", id)
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
-}
-
-func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !allowMethod(w, req.Method, "PUT", "POST") {
-		return
-	}
-
-	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
-	data, err := ioutil.ReadAll(limitedr)
-	if err != nil {
-		writeErrorHttp(w, NewError(
-			ErrBadRequest,
-			err.Error(),
-		))
-		return
-	}
-
-	err = h.messageQueue.Push(key, data)
-	if err != nil {
-		writeErrorHttp(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key string) {

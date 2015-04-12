@@ -280,7 +280,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		if len(req.Keys) > 1 {
 			keyID := req.Keys[1]
 			itemID := new(Item)
-			itemID.Body = []byte(Acatui(key, "/", id))
+			itemID.Body = []byte(id)
 			items[keyID] = itemID
 		}
 
@@ -288,25 +288,10 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 
 	case "add":
 		key := req.Keys[0]
+		recycle := string(req.Item.Body)
 
-		qr := new(queue.QueueRequest)
-		parts := strings.Split(key, "/")
-		if len(parts) == 2 {
-			qr.TopicName = parts[0]
-			qr.LineName = parts[1]
-			qr.Recycle = string(req.Item.Body)
-		} else if len(parts) == 1 {
-			qr.TopicName = parts[0]
-		} else {
-			writeErrorMc(resp, NewError(
-				ErrBadKey,
-				`key parts error: `+ItoaQuick(len(parts)),
-			))
-			return
-		}
-
-		log.Printf("creating... %v", qr)
-		err = m.messageQueue.Create(qr)
+		log.Printf("creating... %s %s", key, recycle)
+		err = m.messageQueue.Create(key, recycle)
 		if err != nil {
 			writeErrorMc(resp, err)
 			return
