@@ -15,7 +15,7 @@ func TestNewUnitedQueue(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		uq.Close()
@@ -28,14 +28,14 @@ func TestCreateTopic(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -49,23 +49,23 @@ func TestCreateLine(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
 		So(topic, ShouldNotBeNil)
 
-		cr = new(CreateRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
@@ -79,14 +79,14 @@ func TestPush(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -104,14 +104,14 @@ func TestMultiPush(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -133,14 +133,14 @@ func TestPop(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -150,10 +150,10 @@ func TestPop(t *testing.T) {
 		err = uq.Push("foo", data)
 		So(err, ShouldBeNil)
 
-		cr = new(CreateRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
@@ -171,14 +171,14 @@ func TestMultiPop(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -192,10 +192,10 @@ func TestMultiPop(t *testing.T) {
 		err = uq.MultiPush("foo", datas)
 		So(err, ShouldBeNil)
 
-		cr = new(CreateRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
@@ -215,14 +215,14 @@ func TestConfirm(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -232,11 +232,11 @@ func TestConfirm(t *testing.T) {
 		err = uq.Push("foo", data)
 		So(err, ShouldBeNil)
 
-		cr = new(CreateRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		cr.Recycle = 10 * time.Second
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		qr.Recycle = 10 * time.Second
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]
@@ -258,14 +258,14 @@ func TestMultiConfirm(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(mdb, ShouldNotBeNil)
 
-		uq, err := NewUnitedQueue(mdb)
+		uq, err := NewUnitedQueue(mdb, "127.0.0.1", 9689, nil, "uq")
 		So(err, ShouldBeNil)
 		So(uq, ShouldNotBeNil)
 		defer uq.Close()
 
-		cr := new(CreateRequest)
-		cr.TopicName = "foo"
-		err = uq.Create(cr)
+		qr := new(QueueRequest)
+		qr.TopicName = "foo"
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		topic := uq.topics["foo"]
@@ -279,11 +279,11 @@ func TestMultiConfirm(t *testing.T) {
 		err = uq.MultiPush("foo", datas)
 		So(err, ShouldBeNil)
 
-		cr = new(CreateRequest)
-		cr.TopicName = "foo"
-		cr.LineName = "x"
-		cr.Recycle = 10 * time.Second
-		err = uq.Create(cr)
+		qr = new(QueueRequest)
+		qr.TopicName = "foo"
+		qr.LineName = "x"
+		qr.Recycle = 10 * time.Second
+		err = uq.Create(qr)
 		So(err, ShouldBeNil)
 
 		line := topic.lines["x"]

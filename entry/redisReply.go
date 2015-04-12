@@ -37,10 +37,12 @@ func StatusReply(status string) (r *Reply) {
 	return
 }
 
-func ErrorReply(err interface{}) (r *Reply) {
+func ErrorReply(err error) (r *Reply) {
 	r = &Reply{}
 	r.Type = ReplyTypeError
-	r.Value = fmt.Sprint(err)
+	if err != nil {
+		r.Value = err.Error()
+	}
 	return
 }
 

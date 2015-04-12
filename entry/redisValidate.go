@@ -25,6 +25,7 @@ var cmdrules = map[string][]interface{}{
 	"QMPOP":  []interface{}{3, -1},
 	"QDEL":   []interface{}{2, 2},
 	"QMDEL":  []interface{}{2, -1},
+	"QEMPTY": []interface{}{2, 2},
 	// key
 	"DEL":     []interface{}{2, -1},
 	"TYPE":    []interface{}{2, 2},

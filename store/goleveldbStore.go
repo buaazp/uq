@@ -59,9 +59,11 @@ func (l *LevelStore) Del(key string) error {
 	// return nil
 }
 
-func (l *LevelStore) Close() {
+func (l *LevelStore) Close() error {
 	err := l.db.Close()
 	if err != nil {
 		log.Printf("leveldb close error: %s", err)
+		return err
 	}
+	return nil
 }

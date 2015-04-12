@@ -17,7 +17,7 @@ var port, testCount, concurrency, dataSize, bucket int
 
 func init() {
 	flag.StringVar(&host, "h", "127.0.0.1", "hostname")
-	flag.IntVar(&port, "p", 11211, "port")
+	flag.IntVar(&port, "p", 8808, "port")
 	flag.IntVar(&concurrency, "c", 10, "concurrency level")
 	flag.IntVar(&testCount, "n", 10000, "test count")
 	flag.IntVar(&dataSize, "d", 200, "data size")
@@ -162,8 +162,12 @@ func getTestSingle(ch chan bool, cn, n int) error {
 			// fmt.Printf("redis.strings %v\n", v)
 			end := time.Now()
 			duration := end.Sub(start).Seconds()
-			id := uint64(rpl[1].(int64))
-			log.Printf("get succ: %d spend: %.3fms", id, duration*1000)
+			id, err := redis.String(rpl[1], err)
+			if err != nil {
+				fmt.Printf("redis.string error: c%d %v\n", cn, err)
+				return err
+			}
+			log.Printf("get succ: %s spend: %.3fms", id, duration*1000)
 		}
 	}
 	ch <- true

@@ -97,7 +97,10 @@ func (r *RedisEntry) Process(session *Session, cmd *Command) (reply *Reply) {
 	// varify command
 	if err := verifyCommand(cmd); err != nil {
 		log.Printf("[%s] bad command %s\n", session.RemoteAddr(), cmd)
-		return ErrorReply(err)
+		return ErrorReply(NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 	}
 
 	// invoke
@@ -126,6 +129,8 @@ func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Repl
 		reply = r.OnQdel(cmd)
 	} else if cmdName == "QMDEL" {
 		reply = r.OnQmdel(cmd)
+	} else if cmdName == "QEMPTY" {
+		reply = r.OnQempty(cmd)
 	} else {
 		reply = r.OnUndefined(session, cmd)
 	}
@@ -134,7 +139,10 @@ func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Repl
 }
 
 func (r *RedisEntry) OnUndefined(session *Session, cmd *Command) (reply *Reply) {
-	return ErrorReply("uq NotSupported: " + cmd.String())
+	return ErrorReply(NewError(
+		ErrBadRequest,
+		"command not supported: "+cmd.String(),
+	))
 }
 
 func (r *RedisEntry) Stop() {

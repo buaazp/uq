@@ -2,35 +2,16 @@ package entry
 
 import (
 	"log"
-	"strings"
-	"time"
 
-	"github.com/buaazp/uq/queue"
+	. "github.com/buaazp/uq/utils"
 )
 
 func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
-	arg := cmd.StringAtIndex(2)
+	recycle := cmd.StringAtIndex(2)
 
-	cr := new(queue.CreateRequest)
-	parts := strings.Split(key, "/")
-	if len(parts) == 2 {
-		cr.TopicName = parts[0]
-		cr.LineName = parts[1]
-		if arg != "" {
-			recycle, err := time.ParseDuration(arg)
-			if err != nil {
-				return ErrorReply(err)
-			}
-			cr.Recycle = recycle
-		}
-	} else if len(parts) == 1 {
-		cr.TopicName = parts[0]
-	} else {
-		return ErrorReply("ERR bad key format '" + key + "'")
-	}
-
-	err := r.messageQueue.Create(cr)
+	log.Printf("creating... %s %s", key, recycle)
+	err := r.messageQueue.Create(key, recycle)
 	if err != nil {
 		return ErrorReply(err)
 	}
@@ -41,7 +22,10 @@ func (r *RedisEntry) OnQpush(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 	val, err := cmd.ArgAtIndex(2)
 	if err != nil {
-		return ErrorReply(err)
+		return ErrorReply(NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 	}
 
 	err = r.messageQueue.Push(key, val)
@@ -72,8 +56,8 @@ func (r *RedisEntry) OnQpop(cmd *Command) *Reply {
 	}
 
 	vals := make([]interface{}, 2)
-	vals[0] = id
-	vals[1] = value
+	vals[0] = value
+	vals[1] = id
 
 	return MultiBulksReply(vals)
 }
@@ -82,7 +66,10 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 	n, err := cmd.IntAtIndex(2)
 	if err != nil {
-		return ErrorReply(err)
+		return ErrorReply(NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
 	}
 
 	ids, values, err := r.messageQueue.MultiPop(key, n)
@@ -94,10 +81,10 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 
 	vals := make([]interface{}, np*2)
 	for i, index := 0, 0; i < np; i++ {
-		vals[index] = ids[i]
+		vals[index] = values[i]
 		index++
 
-		vals[index] = values[i]
+		vals[index] = ids[i]
 		index++
 	}
 
@@ -117,22 +104,29 @@ func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
 }
 
 func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
-	var err error
-	key := cmd.StringAtIndex(1)
-	ids := make([]uint64, cmd.Len()-2)
-	for i := 2; i < cmd.Len(); i++ {
-		ids[i-2], err = cmd.Uint64AtIndex(i)
+	keys := cmd.StringArgs()[1:]
+	log.Printf("keys: %v", keys)
+
+	errs := r.messageQueue.MultiConfirm(keys)
+
+	vals := make([]interface{}, len(errs))
+	for i, err := range errs {
 		if err != nil {
-			return ErrorReply(err)
+			vals[i] = err.Error()
+		} else {
+			vals[i] = "OK"
 		}
 	}
-	log.Printf("key: %s ids: %v", key, ids)
 
-	n, err := r.messageQueue.MultiConfirm(key, ids)
+	return MultiBulksReply(vals)
+}
+
+func (r *RedisEntry) OnQempty(cmd *Command) *Reply {
+	key := cmd.StringAtIndex(1)
+
+	err := r.messageQueue.Empty(key)
 	if err != nil {
-		log.Printf("confirm error: %s", err)
 		return ErrorReply(err)
 	}
-
-	return IntegerReply(n)
+	return StatusReply("OK")
 }

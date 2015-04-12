@@ -2,20 +2,19 @@ package entry
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/buaazp/uq/queue"
 	. "github.com/buaazp/uq/utils"
-	"github.com/gorilla/mux"
 )
 
 type HttpEntry struct {
 	host         string
 	port         int
+	mux          map[string]func(http.ResponseWriter, *http.Request, string)
 	server       *http.Server
 	stopListener *StopListener
 	messageQueue queue.MessageQueue
@@ -24,16 +23,19 @@ type HttpEntry struct {
 func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*HttpEntry, error) {
 	h := new(HttpEntry)
 
-	router := mux.NewRouter()
-	router.HandleFunc("/add", h.addHandler).Methods("POST")
-	router.HandleFunc("/pop/{topic}/{line}", h.popHandler).Methods("GET")
-	router.HandleFunc("/push/{topic}", h.pushHandler).Methods("POST")
-	router.HandleFunc("/del", h.delHandler).Methods("POST")
+	h.mux = map[string]func(http.ResponseWriter, *http.Request, string){
+		"/add":   h.addHandler,
+		"/push":  h.pushHandler,
+		"/pop":   h.popHandler,
+		"/del":   h.delHandler,
+		"/empty": h.emptyHandler,
+		"/stat":  h.statHandler,
+	}
 
 	addr := Addrcat(host, port)
 	server := new(http.Server)
 	server.Addr = addr
-	server.Handler = router
+	server.Handler = h
 
 	h.host = host
 	h.port = port
@@ -43,92 +45,150 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 	return h, nil
 }
 
-func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request) {
-	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
-	data, err := ioutil.ReadAll(limitedr)
-	if err != nil {
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+func (h *HttpEntry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	for prefix, handler := range h.mux {
+		if strings.HasPrefix(req.URL.Path, prefix) {
+			key := req.URL.Path[len(prefix):]
+			handler(w, req, key)
+			return
+		}
+	}
+
+	http.Error(w, "404 Not Found!", http.StatusNotFound)
+	return
+}
+
+// allowMethod verifies that the given method is one of the allowed methods,
+// and if not, it writes an error to w.  A boolean is returned indicating
+// whether or not the method is allowed.
+func allowMethod(w http.ResponseWriter, m string, ms ...string) bool {
+	for _, meth := range ms {
+		if m == meth {
+			return true
+		}
+	}
+	w.Header().Set("Allow", strings.Join(ms, ","))
+	http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	return false
+}
+
+func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "PUT", "POST") {
 		return
 	}
 
-	// len: 56
-	// json: {"TopicName":"foo","LineName":"x","Recycle":10000000000}
-	cr := new(queue.CreateRequest)
-	err = json.Unmarshal(data, cr)
+	err := req.ParseForm()
 	if err != nil {
-		log.Printf("create error: %s", err)
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+		writeErrorHttp(w, NewError(
+			ErrInternalError,
+			err.Error(),
+		))
 		return
 	}
 
-	err = h.messageQueue.Create(cr)
+	topicName := req.FormValue("topic")
+	lineName := req.FormValue("line")
+	key = topicName + "/" + lineName
+	recycle := req.FormValue("recycle")
+
+	log.Printf("creating... %s %s", key, recycle)
+	err = h.messageQueue.Create(key, recycle)
 	if err != nil {
-		log.Printf("create error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		writeErrorHttp(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request) {
-	vars := mux.Vars(req)
-	t := vars["topic"]
-	l := vars["line"]
-	key := t + "/" + l
+func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "PUT", "POST") {
+		return
+	}
+
+	err := req.ParseForm()
+	if err != nil {
+		writeErrorHttp(w, NewError(
+			ErrInternalError,
+			err.Error(),
+		))
+		return
+	}
+
+	data := []byte(req.FormValue("value"))
+	err = h.messageQueue.Push(key, data)
+	if err != nil {
+		writeErrorHttp(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "HEAD", "GET") {
+		return
+	}
 
 	id, data, err := h.messageQueue.Pop(key)
 	if err != nil {
-		// log.Printf("pop error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		writeErrorHttp(w, err)
 		return
 	}
-	if len(data) <= 0 {
-		http.Error(w, "404 Not Found!", http.StatusNotFound)
-		return
-	} else {
-		w.Header().Set("Content-Type", "text/plain")
-		w.Header().Set("X-UQ-MessageID", strconv.FormatUint(id, 10))
-		w.WriteHeader(http.StatusOK)
-		w.Write(data)
-	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("X-UQ-ID", id)
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
 }
 
-func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request) {
-	vars := mux.Vars(req)
-	t := vars["topic"]
-
-	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
-	data, err := ioutil.ReadAll(limitedr)
-	if err != nil {
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "DELETE") {
 		return
 	}
 
-	err = h.messageQueue.Push(t, data)
+	err := h.messageQueue.Confirm(key)
 	if err != nil {
-		log.Printf("push error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		writeErrorHttp(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request) {
-	limitedr := NewLimitedBufferReader(req.Body, MaxBodyLength)
-	data, err := ioutil.ReadAll(limitedr)
-	if err != nil {
-		http.Error(w, "400 Bad Request!\r\n"+err.Error(), http.StatusBadRequest)
+func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "DELETE") {
 		return
 	}
-	key := string(data)
 
-	err = h.messageQueue.Confirm(key)
+	err := h.messageQueue.Empty(key)
 	if err != nil {
-		log.Printf("confirm error: %s", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+		writeErrorHttp(w, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "HEAD", "GET") {
+		return
+	}
+
+	qs, err := h.messageQueue.Stat(key)
+	if err != nil {
+		writeErrorHttp(w, err)
+		return
+	}
+
+	data, err := json.Marshal(qs)
+	if err != nil {
+		writeErrorHttp(w, NewError(
+			ErrInternalError,
+			err.Error(),
+		))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(data)
 }
 
 func (h *HttpEntry) ListenAndServe() error {
@@ -152,4 +212,17 @@ func (h *HttpEntry) Stop() {
 	log.Printf("http entry stoping...")
 	h.stopListener.Stop()
 	h.messageQueue.Close()
+}
+
+func writeErrorHttp(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+	switch e := err.(type) {
+	case *Error:
+		e.WriteTo(w)
+	default:
+		log.Printf("unexpected error: %v", err)
+		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+	}
 }

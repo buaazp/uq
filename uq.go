@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
@@ -25,18 +26,18 @@ var (
 	port     int
 	protocol string
 	db       string
-	path     string
+	dir      string
 	etcd     string
 	cluster  string
 )
 
 func init() {
-	flag.StringVar(&ip, "ip", "127.0.0.1", "self ip address")
+	flag.StringVar(&ip, "ip", "127.0.0.1", "self ip/host address")
 	flag.StringVar(&host, "host", "0.0.0.0", "listen ip")
-	flag.IntVar(&port, "port", 6379, "listen port")
-	flag.StringVar(&protocol, "protocol", "redis", "frontend interface(redis, mc, http)")
-	flag.StringVar(&db, "db", "leveldb", "backend storage type")
-	flag.StringVar(&path, "path", "./data/uq.db", "backend storage path")
+	flag.IntVar(&port, "port", 8808, "listen port")
+	flag.StringVar(&protocol, "protocol", "redis", "frontend interface type [redis/mc/http]")
+	flag.StringVar(&db, "db", "leveldb", "backend storage type [leveldb/memdb]")
+	flag.StringVar(&dir, "dir", "./data", "backend storage path")
 	flag.StringVar(&etcd, "etcd", "", "etcd service location")
 	flag.StringVar(&cluster, "cluster", "uq", "cluster name in etcd")
 }
@@ -52,8 +53,10 @@ func main() {
 	var err error
 	var storage store.Storage
 	if db == "leveldb" {
-		storage, err = store.NewLevelStore(path)
-	} else if db == "memory" {
+		dbpath := path.Clean(path.Join(dir, "uq.db"))
+		log.Printf("dbpath: %s", dbpath)
+		storage, err = store.NewLevelStore(dbpath)
+	} else if db == "memdb" {
 		storage, err = store.NewMemStore()
 	}
 	if err != nil {

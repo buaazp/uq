@@ -3,13 +3,18 @@ package queue
 import (
 	"bytes"
 	"container/list"
+	"encoding/binary"
 	"encoding/gob"
-	"errors"
 	"log"
-	"strconv"
 	"sync"
 	"time"
+
+	. "github.com/buaazp/uq/utils"
 )
+
+func init() {
+	gob.Register(&lineStore{})
+}
 
 type line struct {
 	name         string
@@ -20,7 +25,6 @@ type line struct {
 	recycleKey   string
 	inflight     *list.List
 	inflightLock sync.RWMutex
-	inflightKey  string
 	ihead        uint64
 	imap         map[uint64]bool
 	t            *topic
@@ -32,13 +36,28 @@ type lineStore struct {
 }
 
 func (l *line) exportHead() error {
-	lineHeadData := []byte(strconv.FormatUint(l.head, 10))
-	return l.t.q.storage.Set(l.headKey, lineHeadData)
+	lineHeadData := make([]byte, 8)
+	binary.LittleEndian.PutUint64(lineHeadData, l.head)
+	err := l.t.q.storage.Set(l.headKey, lineHeadData)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func (l *line) exportRecycle() error {
 	lineRecycleData := []byte(l.recycle.String())
-	return l.t.q.storage.Set(l.recycleKey, lineRecycleData)
+	err := l.t.q.storage.Set(l.recycleKey, lineRecycleData)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
 }
 
 func (l *line) pop() (uint64, []byte, error) {
@@ -73,7 +92,10 @@ func (l *line) pop() (uint64, []byte, error) {
 	topicTail := l.t.getTail()
 	if l.head >= topicTail {
 		// log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
-		return 0, nil, errors.New(ErrNone)
+		return 0, nil, NewError(
+			ErrNone,
+			`line pop`,
+		)
 	}
 
 	data, err := l.t.getData(tid)
@@ -181,19 +203,28 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 	if len(ids) > 0 {
 		return ids, datas, nil
 	}
-	return nil, nil, errors.New(ErrNone)
+	return nil, nil, NewError(
+		ErrNone,
+		`line mPop`,
+	)
 }
 
 func (l *line) confirm(id uint64) error {
 	if l.recycle == 0 {
-		return errors.New(ErrNotDelivered)
+		return NewError(
+			ErrNotDelivered,
+			`line confirm`,
+		)
 	}
 
 	l.headLock.RLock()
 	defer l.headLock.RUnlock()
 	head := l.head
 	if id >= head {
-		return errors.New(ErrNotDelivered)
+		return NewError(
+			ErrNotDelivered,
+			`line confirm`,
+		)
 	}
 
 	l.inflightLock.Lock()
@@ -210,7 +241,10 @@ func (l *line) confirm(id uint64) error {
 		}
 	}
 
-	return errors.New(ErrNotDelivered)
+	return NewError(
+		ErrNotDelivered,
+		`line confirm`,
+	)
 }
 
 func (l *line) updateiHead() {
@@ -230,46 +264,50 @@ func (l *line) updateiHead() {
 	}
 }
 
-func (l *line) mConfirm(ids []uint64) (int, error) {
-	if l.recycle == 0 {
-		return 0, errors.New(ErrNotDelivered)
-	}
-
-	l.headLock.RLock()
-	head := l.head
-	l.headLock.RUnlock()
-
+func (l *line) empty() error {
 	l.inflightLock.Lock()
 	defer l.inflightLock.Unlock()
+	l.inflight.Init()
+	l.imap = make(map[uint64]bool)
+	l.ihead = l.t.getTail()
 
-	var confirmed int = 0
-	for _, id := range ids {
-		if id >= head {
-			log.Printf("ID[%d] is Not Delivered", id)
-			continue
-		}
+	l.headLock.Lock()
+	defer l.headLock.Unlock()
+	l.head = l.t.getTail()
 
-		for m := l.inflight.Front(); m != nil; m = m.Next() {
-			msg := m.Value.(*inflightMessage)
-			if msg.Tid == id {
-				l.inflight.Remove(m)
-				log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
-				l.imap[id] = false
-				l.updateiHead()
-				confirmed++
-			}
-		}
+	err := l.exportHead()
+	if err != nil {
+		return err
 	}
 
-	if confirmed == 0 {
-		return 0, errors.New(ErrNotDelivered)
-	}
-	return confirmed, nil
+	log.Printf("line[%s] empty succ", l.name)
+	return nil
+}
+
+func (l *line) stat() (*QueueStat, error) {
+	qs := new(QueueStat)
+	qs.TopicName = l.t.name
+	qs.LineName = l.name
+	qs.Recycle = l.recycle.String()
+
+	l.inflightLock.Lock()
+	qs.IHead = l.ihead
+	inflightLen := uint64(l.inflight.Len())
+	l.inflightLock.Unlock()
+
+	l.headLock.Lock()
+	qs.Head = l.head
+	l.headLock.Unlock()
+
+	qs.Tail = l.t.getTail()
+
+	qs.Count = inflightLen + qs.Tail - qs.Head
+
+	return qs, nil
 }
 
 func (l *line) exportLine() error {
 	// log.Printf("start export line[%s]...", l.name)
-
 	lineStoreValue, err := l.genLineStore()
 	if err != nil {
 		return err
@@ -279,16 +317,22 @@ func (l *line) exportLine() error {
 	enc := gob.NewEncoder(buffer)
 	err = enc.Encode(lineStoreValue)
 	if err != nil {
-		return err
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 
 	lineStoreKey := l.t.name + "/" + l.name
 	err = l.t.q.storage.Set(lineStoreKey, buffer.Bytes())
 	if err != nil {
-		return err
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
 	}
 
-	log.Printf("line[%s] export finisded.", l.name)
+	// log.Printf("line[%s] export finisded.", l.name)
 	return nil
 }
 
