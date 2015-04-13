@@ -139,22 +139,22 @@ func (r *RedisEntry) OnInfo(cmd *Command) *Reply {
 		return ErrorReply(err)
 	}
 
-	// for humen reading
-	// strs := qs.ToStrings()
-	// vals := make([]interface{}, len(strs))
-	// for i, str := range strs {
-	// 	vals[i] = str
-	// }
-	// return MultiBulksReply(vals)
+	// for human reading
+	strs := qs.ToRedisStrings()
+	vals := make([]interface{}, len(strs))
+	for i, str := range strs {
+		vals[i] = str
+	}
+	return MultiBulksReply(vals)
 
 	// for json format
-	data, err := qs.ToJson()
-	if err != nil {
-		return ErrorReply(NewError(
-			ErrInternalError,
-			err.Error(),
-		))
-	}
+	// data, err := qs.ToJson()
+	// if err != nil {
+	// 	return ErrorReply(NewError(
+	// 		ErrInternalError,
+	// 		err.Error(),
+	// 	))
+	// }
 
-	return StatusReply(string(data))
+	// return StatusReply(string(data))
 }

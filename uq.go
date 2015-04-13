@@ -47,13 +47,37 @@ func init() {
 	flag.StringVar(&cluster, "cluster", "uq", "cluster name in etcd")
 }
 
+func checkArgs() bool {
+	if !belong(db, []string{"leveldb", "memdb"}) {
+		fmt.Printf("db mode %s is not supported!\n", db)
+		return false
+	}
+	if !belong(protocol, []string{"redis", "mc", "http"}) {
+		fmt.Printf("protocol %s is not supported!\n", protocol)
+		return false
+	}
+	return true
+}
+
+func belong(single string, team []string) bool {
+	for _, one := range team {
+		if single == one {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Lmicroseconds)
 	log.SetPrefix("[uq] ")
 
 	flag.Parse()
-	fmt.Printf("uq started! 😄\n")
+
+	if !checkArgs() {
+		return
+	}
 
 	var err error
 	var storage store.Storage
@@ -141,6 +165,7 @@ func main() {
 		log.Println(http.ListenAndServe(addr, nil))
 	}()
 
+	fmt.Printf("uq started! 😄\n")
 	select {
 	case signal := <-stop:
 		log.Printf("got signal: %v", signal)

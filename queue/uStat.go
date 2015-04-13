@@ -23,6 +23,16 @@ func (q *QueueStat) ToString() string {
 	return reply
 }
 
+func (q *QueueStat) ToMcString() string {
+	replays := q.ToStrings()
+	for i, replay := range replays {
+		if replay != "" {
+			replays[i] = "STAT " + replay
+		}
+	}
+	return strings.Join(replays, "\r\n")
+}
+
 func (q *QueueStat) ToStrings() []string {
 	replys := make([]string, 0)
 	replys = append(replys, "name:"+q.Name)
@@ -39,13 +49,18 @@ func (q *QueueStat) ToStrings() []string {
 
 	if q.Type == "topic" && q.Lines != nil {
 		for _, lineStat := range q.Lines {
-			replys = append(replys, "{")
+			replys = append(replys, "")
 			ls := lineStat.ToStrings()
 			replys = append(replys, ls...)
-			replys = append(replys, "}")
 		}
 	}
 
+	return replys
+}
+
+func (q *QueueStat) ToRedisStrings() []string {
+	replys := q.ToStrings()
+	replys = append(replys, "")
 	return replys
 }
 

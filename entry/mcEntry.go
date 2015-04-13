@@ -294,20 +294,19 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			return
 		}
 
-		// for humen reading
-		// resp.msg = qs.ToString()
+		// for human reading
+		resp.msg = qs.ToMcString()
 
 		// for json format
-		data, err := qs.ToJson()
-		if err != nil {
-			writeErrorMc(resp, NewError(
-				ErrInternalError,
-				err.Error(),
-			))
-			return
-		}
-
-		resp.msg = string(data)
+		// data, err := qs.ToJson()
+		// if err != nil {
+		// 	writeErrorMc(resp, NewError(
+		// 		ErrInternalError,
+		// 		err.Error(),
+		// 	))
+		// 	return
+		// }
+		// resp.msg = string(data)
 
 	case "add":
 		key := req.Keys[0]
