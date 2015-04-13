@@ -75,7 +75,7 @@ func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []st
 }
 
 func (u *UnitedQueue) loadQueue() error {
-	unitedQueueStoreData, err := u.storage.Get(StorageKeyWord)
+	unitedQueueStoreData, err := u.getData(StorageKeyWord)
 	if err != nil {
 		log.Printf("storage not existed: %s", err)
 		return nil
@@ -86,7 +86,7 @@ func (u *UnitedQueue) loadQueue() error {
 		dec := gob.NewDecoder(bytes.NewBuffer(unitedQueueStoreData))
 		if e := dec.Decode(&unitedQueueStoreValue); e == nil {
 			for _, topicName := range unitedQueueStoreValue.Topics {
-				topicStoreData, err := u.storage.Get(topicName)
+				topicStoreData, err := u.getData(topicName)
 				if err != nil || len(topicStoreData) == 0 {
 					continue
 				}
@@ -117,13 +117,13 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	t.quit = make(chan bool)
 
 	t.headKey = topicName + KeyTopicHead
-	topicHeadData, err := u.storage.Get(t.headKey)
+	topicHeadData, err := u.getData(t.headKey)
 	if err != nil {
 		return nil, err
 	}
 	t.head = binary.LittleEndian.Uint64(topicHeadData)
 	t.tailKey = topicName + KeyTopicTail
-	topicTailData, err := u.storage.Get(t.tailKey)
+	topicTailData, err := u.getData(t.tailKey)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	lines := make(map[string]*line)
 	for _, lineName := range topicStoreValue.Lines {
 		lineStoreKey := topicName + "/" + lineName
-		lineStoreData, err := u.storage.Get(lineStoreKey)
+		lineStoreData, err := u.getData(lineStoreKey)
 		if err != nil || len(lineStoreData) == 0 {
 			continue
 		}
@@ -238,11 +238,12 @@ func (u *UnitedQueue) createTopic(name string, fromEtcd bool) error {
 	}
 
 	u.topicsLock.Lock()
+	defer u.topicsLock.Unlock()
 	u.topics[name] = t
-	u.topicsLock.Unlock()
 
 	err = u.exportQueue()
 	if err != nil {
+		t.remove()
 		delete(u.topics, name)
 		return err
 	}
@@ -300,7 +301,7 @@ func (u *UnitedQueue) exportQueue() error {
 		)
 	}
 
-	err = u.storage.Set(StorageKeyWord, buffer.Bytes())
+	err = u.setData(StorageKeyWord, buffer.Bytes())
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -313,9 +314,6 @@ func (u *UnitedQueue) exportQueue() error {
 }
 
 func (u *UnitedQueue) genQueueStore() (*unitedQueueStore, error) {
-	u.topicsLock.RLock()
-	defer u.topicsLock.RUnlock()
-
 	topics := make([]string, len(u.topics))
 	i := 0
 	for topicName, _ := range u.topics {
@@ -531,6 +529,72 @@ func (u *UnitedQueue) Empty(key string) error {
 	}
 
 	return t.empty()
+}
+
+func (u *UnitedQueue) Remove(key string) error {
+	key = strings.TrimPrefix(key, "/")
+	key = strings.TrimSuffix(key, "/")
+
+	var topicName, lineName string
+	parts := strings.Split(key, "/")
+	if len(parts) < 1 || len(parts) > 2 {
+		return NewError(
+			ErrBadKey,
+			`remove key parts error: `+ItoaQuick(len(parts)),
+		)
+	}
+
+	topicName = parts[0]
+	if topicName == "" {
+		return NewError(
+			ErrBadKey,
+			`rmove topic is nil`,
+		)
+	}
+
+	if len(parts) == 1 {
+		return u.removeTopic(topicName)
+	}
+
+	u.topicsLock.RLock()
+	t, ok := u.topics[topicName]
+	u.topicsLock.RUnlock()
+	if !ok {
+		return NewError(
+			ErrTopicNotExisted,
+			`queue remove`,
+		)
+	}
+
+	lineName = parts[1]
+	return t.removeLine(lineName)
+}
+
+func (u *UnitedQueue) removeTopic(name string) error {
+	u.topicsLock.Lock()
+	defer u.topicsLock.Unlock()
+
+	t, ok := u.topics[name]
+	if !ok {
+		return NewError(
+			ErrTopicNotExisted,
+			`queue remove`,
+		)
+	}
+
+	err := u.unRegisterTopic(name)
+	if err != nil {
+		return err
+	}
+
+	delete(u.topics, name)
+	err = u.exportQueue()
+	if err != nil {
+		u.topics[name] = t
+		return err
+	}
+
+	return t.remove()
 }
 
 func (u *UnitedQueue) Stat(key string) (*QueueStat, error) {

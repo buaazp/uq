@@ -57,23 +57,26 @@ func (t *topic) createLine(name string, recycle time.Duration, fromEtcd bool) er
 		return err
 	}
 
+	if !fromEtcd {
+		err := t.q.registerLine(t.name, l.name, l.recycle.String())
+		if err != nil {
+			log.Printf("topic[%s] register line error: %s", t.name, err)
+		}
+	}
+
 	t.linesLock.Lock()
 	t.lines[name] = l
 	t.linesLock.Unlock()
 
 	err = t.exportTopic()
 	if err != nil {
+		t.linesLock.Lock()
 		delete(t.lines, name)
+		t.linesLock.Unlock()
 		return err
 	}
 
-	if !fromEtcd {
-		err := t.q.registerLine(t.name, l.name, l.recycle.String())
-		if err != nil {
-			log.Printf("register line error: %s", err)
-		}
-	}
-	log.Printf("line[%s:%v] created.", name, recycle)
+	log.Printf("topic[%s] line[%s:%v] created.", t.name, name, recycle)
 	return nil
 }
 
@@ -83,7 +86,7 @@ func (t *topic) newLine(name string, recycle time.Duration) (*line, error) {
 	l := new(line)
 	l.name = name
 	l.head = t.head
-	l.headKey = t.name + "/" + name + KeyLineHead
+	// l.headKey = t.name + "/" + name + KeyLineHead
 	l.recycle = recycle
 	l.recycleKey = t.name + "/" + name + KeyLineRecycle
 	l.inflight = inflight
@@ -91,7 +94,11 @@ func (t *topic) newLine(name string, recycle time.Duration) (*line, error) {
 	l.imap = imap
 	l.t = t
 
-	err := l.exportHead()
+	// err := l.exportHead()
+	// if err != nil {
+	// 	return nil, err
+	// }
+	err := l.exportLine()
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +125,18 @@ func (t *topic) getTail() uint64 {
 func (t *topic) exportHead() error {
 	topicHeadData := make([]byte, 8)
 	binary.LittleEndian.PutUint64(topicHeadData, t.head)
-	err := t.q.storage.Set(t.headKey, topicHeadData)
+	err := t.q.setData(t.headKey, topicHeadData)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
+}
+
+func (t *topic) removeHeadData() error {
+	err := t.q.delData(t.headKey)
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -131,7 +149,18 @@ func (t *topic) exportHead() error {
 func (t *topic) exportTail() error {
 	topicTailData := make([]byte, 8)
 	binary.LittleEndian.PutUint64(topicTailData, t.tail)
-	err := t.q.storage.Set(t.tailKey, topicTailData)
+	err := t.q.setData(t.tailKey, topicTailData)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+	return nil
+}
+
+func (t *topic) removeTailData() error {
+	err := t.q.delData(t.tailKey)
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -157,7 +186,7 @@ func (t *topic) exportTopic() error {
 		)
 	}
 
-	err = t.q.storage.Set(t.name, buffer.Bytes())
+	err = t.q.setData(t.name, buffer.Bytes())
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -166,6 +195,17 @@ func (t *topic) exportTopic() error {
 	}
 
 	// log.Printf("topic[%s] export finisded.", t.name)
+	return nil
+}
+
+func (t *topic) removeTopicData() error {
+	err := t.q.delData(t.name)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
 	return nil
 }
 
@@ -187,20 +227,11 @@ func (t *topic) genTopicStore() (*topicStore, error) {
 }
 
 func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, error) {
-	// log.Printf("loading inflights: %v", lineStoreValue.Inflights)
+	// log.Printf("topic[%s] loading inflights: %v", t.name, lineStoreValue.Inflights)
 	l := new(line)
 	l.name = lineName
-	l.headKey = t.name + "/" + lineName + KeyLineHead
-	lineHeadData, err := t.q.storage.Get(l.headKey)
-	if err != nil {
-		return nil, NewError(
-			ErrInternalError,
-			err.Error(),
-		)
-	}
-	l.head = binary.LittleEndian.Uint64(lineHeadData)
 	l.recycleKey = t.name + "/" + lineName + KeyLineRecycle
-	lineRecycleData, err := t.q.storage.Get(l.recycleKey)
+	lineRecycleData, err := t.q.getData(l.recycleKey)
 	if err != nil {
 		return nil, NewError(
 			ErrInternalError,
@@ -215,6 +246,7 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 		)
 	}
 	l.recycle = lineRecycle
+	l.head = lineStoreValue.Head
 	l.ihead = lineStoreValue.Ihead
 	imap := make(map[uint64]bool)
 	for i := l.ihead; i < l.head; i++ {
@@ -225,7 +257,6 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	for index, _ := range lineStoreValue.Inflights {
 		msg := &lineStoreValue.Inflights[index]
 		inflight.PushBack(msg)
-		// inflight.PushBack(&lineStoreValue.Inflights[index])
 		imap[msg.Tid] = true
 	}
 	l.inflight = inflight
@@ -233,7 +264,7 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 
 	err = t.q.registerLine(t.name, l.name, l.recycle.String())
 	if err != nil {
-		log.Printf("register line error: %s", err)
+		log.Printf("topic[%s] register line error: %s", t.name, err)
 	}
 	return l, nil
 }
@@ -247,7 +278,7 @@ func (t *topic) push(data []byte) error {
 	if err != nil {
 		return err
 	}
-	// log.Printf("key[%s][%s] pushed.", key, string(data))
+	// log.Printf("topic[%s] %s pushed.", t.name, string(data))
 
 	t.tail++
 	err = t.exportTail()
@@ -278,7 +309,7 @@ func (t *topic) mPush(datas [][]byte) error {
 			t.tail = oldTail
 			return err
 		}
-		// log.Printf("key[%s][%s] pushed.", key, string(data))
+		// log.Printf("topic[%s] %s pushed.", t.name, string(data))
 		t.tail++
 	}
 
@@ -296,7 +327,7 @@ func (t *topic) pop(name string) (uint64, []byte, error) {
 	l, ok := t.lines[name]
 	t.linesLock.RUnlock()
 	if !ok {
-		log.Printf("line[%s] not existed.", name)
+		log.Printf("topic[%s] line[%s] not existed.", t.name, name)
 		return 0, nil, NewError(
 			ErrLineNotExisted,
 			`topic pop`,
@@ -311,7 +342,7 @@ func (t *topic) mPop(name string, n int) ([]uint64, [][]byte, error) {
 	l, ok := t.lines[name]
 	t.linesLock.RUnlock()
 	if !ok {
-		log.Printf("line[%s] not existed.", name)
+		log.Printf("topic[%s] line[%s] not existed.", t.name, name)
 		return nil, nil, NewError(
 			ErrLineNotExisted,
 			`topic mPop`,
@@ -326,7 +357,7 @@ func (t *topic) confirm(name string, id uint64) error {
 	l, ok := t.lines[name]
 	t.linesLock.RUnlock()
 	if !ok {
-		log.Printf("line[%s] not existed.", name)
+		log.Printf("topic[%s] line[%s] not existed.", t.name, name)
 		return NewError(
 			ErrLineNotExisted,
 			`topic confirm`,
@@ -341,7 +372,7 @@ func (t *topic) emptyLine(name string) error {
 	l, ok := t.lines[name]
 	t.linesLock.RUnlock()
 	if !ok {
-		log.Printf("line[%s] not existed.", name)
+		log.Printf("topic[%s] line[%s] not existed.", t.name, name)
 		return NewError(
 			ErrLineNotExisted,
 			`topic emptyLine`,
@@ -358,13 +389,15 @@ func (t *topic) empty() error {
 	for name, l := range t.lines {
 		err := l.empty()
 		if err != nil {
-			log.Printf("line[%s] empty error: %s", name, err)
+			log.Printf("topic[%s] line[%s] empty error: %s", t.name, name, err)
 			return err
 		}
 	}
 
 	t.headLock.Lock()
 	defer t.headLock.Unlock()
+	t.tailLock.RLock()
+	defer t.tailLock.RUnlock()
 	t.head = t.tail
 	err := t.exportHead()
 	if err != nil {
@@ -375,12 +408,102 @@ func (t *topic) empty() error {
 	return nil
 }
 
+func (t *topic) removeLine(name string) error {
+	t.linesLock.RLock()
+	l, ok := t.lines[name]
+	t.linesLock.RUnlock()
+	if !ok {
+		log.Printf("topic[%s] line[%s] not existed.", t.name, name)
+		return NewError(
+			ErrLineNotExisted,
+			`topic statLine`,
+		)
+	}
+
+	t.linesLock.Lock()
+	delete(t.lines, name)
+	t.linesLock.Unlock()
+	err := t.exportTopic()
+	if err != nil {
+		t.linesLock.Lock()
+		t.lines[name] = l
+		t.linesLock.Unlock()
+		return err
+	}
+
+	return l.remove()
+}
+
+func (t *topic) removeLines() error {
+	for lineName, l := range t.lines {
+		err := l.remove()
+		if err != nil {
+			log.Printf("topic[%s] line[%s] remove error: %s", t.name, lineName, err)
+			continue
+		}
+		delete(t.lines, lineName)
+	}
+
+	// log.Printf("topic[%s]'s all lines removed.", t.name)
+	return nil
+}
+
+func (t *topic) remove() error {
+	t.close()
+
+	t.linesLock.Lock()
+	defer t.linesLock.Unlock()
+
+	err := t.removeLines()
+	if err != nil {
+		log.Printf("topic[%s] removeLines error: %s", err)
+	}
+
+	t.headLock.Lock()
+	defer t.headLock.Unlock()
+	err = t.removeHeadData()
+	if err != nil {
+		log.Printf("topic[%s] removeHeadData error: %s", err)
+	}
+
+	t.tailLock.Lock()
+	defer t.tailLock.Unlock()
+	err = t.removeTailData()
+	if err != nil {
+		log.Printf("topic[%s] removeTailData error: %s", err)
+	}
+
+	err = t.removeTopicData()
+	if err != nil {
+		log.Printf("topic[%s] removeTopicData error: %s", err)
+	}
+
+	err = t.removeMsgData()
+	if err != nil {
+		log.Printf("topic[%s] removeMsgData error: %s", err)
+	}
+
+	return nil
+}
+
+func (t *topic) removeMsgData() error {
+	for i := t.head; i < t.tail; i++ {
+		key := Acatui(t.name, ":", i)
+		err := t.q.delData(key)
+		if err != nil {
+			log.Printf("topic[%s] del data[%s] error; %s", t.name, key, err)
+			continue
+		}
+	}
+	return nil
+}
+
 func (t *topic) statLine(name string) (*QueueStat, error) {
 	t.linesLock.RLock()
 	l, ok := t.lines[name]
 	t.linesLock.RUnlock()
 	if !ok {
-		log.Printf("line[%s] not existed.", name)
+		log.Printf("topic[%s] line[%s] not existed.", t.name, name)
 		return nil, NewError(
 			ErrLineNotExisted,
 			`topic statLine`,
@@ -401,7 +524,7 @@ func (t *topic) stat() (*QueueStat, error) {
 		//TODO: print lines
 		ls, err := l.stat()
 		if err != nil {
-			log.Printf("lien[%s] stat error: %s", name, err)
+			log.Printf("topic[%s] lien[%s] stat error: %s", t.name, name, err)
 			continue
 		}
 		qs.Lines = append(qs.Lines, ls)
@@ -438,21 +561,21 @@ func (t *topic) backgroundClean() {
 		case <-backupTick.C:
 			err := t.exportLines()
 			if err != nil {
-				log.Printf("export topic[%s] lines error: %s", t.name, err)
+				log.Printf("topic[%s] export lines error: %s", t.name, err)
 			}
 		case <-cleanTick.C:
 			bgQuit := t.clean()
 			if bgQuit {
-				log.Printf("t.clean return quit: %v", bgQuit)
+				log.Printf("topic[%s] t.clean return quit: %v", t.name, bgQuit)
 				break
 			}
 		case <-t.quit:
-			log.Printf("background clean catched quit")
+			log.Printf("topic[%s] background clean catched quit", t.name)
 			bgQuit = true
 			break
 		}
 	}
-	log.Printf("background clean exit.")
+	log.Printf("topic[%s] background clean exit.", t.name)
 }
 
 func (t *topic) exportLines() error {
@@ -462,7 +585,7 @@ func (t *topic) exportLines() error {
 	for lineName, l := range t.lines {
 		err := l.exportLine()
 		if err != nil {
-			log.Printf("line[%s] export error: %s", lineName, err)
+			log.Printf("topic[%s] line[%s] export error: %s", t.name, lineName, err)
 			continue
 		}
 	}
@@ -474,8 +597,8 @@ func (t *topic) exportLines() error {
 func (t *topic) clean() (quit bool) {
 	quit = false
 
-	t.headLock.RLock()
-	defer t.headLock.RUnlock()
+	t.headLock.Lock()
+	defer t.headLock.Unlock()
 
 	starting := t.head
 	endTime := time.Now().Add(BgCleanTimeout)
@@ -492,28 +615,28 @@ func (t *topic) clean() (quit bool) {
 		select {
 		case <-t.quit:
 			quit = true
-			log.Printf("catched quit at %d", t.head)
+			log.Printf("topic[%s] catched quit at %d", t.name, t.head)
 			return
 		default:
 			// nothing todo
 		}
 
 		if time.Now().After(endTime) {
-			log.Printf("cleaning timeout, break at %d", t.head)
+			log.Printf("topic[%s] cleaning timeout, break at %d", t.name, t.head)
 			return
 		}
 
 		key := Acatui(t.name, ":", t.head)
 		err := t.q.delData(key)
 		if err != nil {
-			log.Printf("del data[%s] error; %s", key, err)
+			log.Printf("topic[%s] del data[%s] error; %s", t.name, key, err)
 			return
 		}
 
 		t.head++
 		err = t.exportHead()
 		if err != nil {
-			log.Printf("export topic[%s] head error: %s", t.name, err)
+			log.Printf("topic[%s] export head error: %s", t.name, err)
 			return
 		}
 	}

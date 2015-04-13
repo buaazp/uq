@@ -3,7 +3,6 @@ package queue
 import (
 	"bytes"
 	"container/list"
-	"encoding/binary"
 	"encoding/gob"
 	"log"
 	"sync"
@@ -20,7 +19,6 @@ type line struct {
 	name         string
 	head         uint64
 	headLock     sync.RWMutex
-	headKey      string
 	recycle      time.Duration
 	recycleKey   string
 	inflight     *list.List
@@ -31,14 +29,14 @@ type line struct {
 }
 
 type lineStore struct {
+	Head      uint64
 	Inflights []inflightMessage
 	Ihead     uint64
 }
 
-func (l *line) exportHead() error {
-	lineHeadData := make([]byte, 8)
-	binary.LittleEndian.PutUint64(lineHeadData, l.head)
-	err := l.t.q.storage.Set(l.headKey, lineHeadData)
+func (l *line) exportRecycle() error {
+	lineRecycleData := []byte(l.recycle.String())
+	err := l.t.q.setData(l.recycleKey, lineRecycleData)
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -48,9 +46,8 @@ func (l *line) exportHead() error {
 	return nil
 }
 
-func (l *line) exportRecycle() error {
-	lineRecycleData := []byte(l.recycle.String())
-	err := l.t.q.storage.Set(l.recycleKey, lineRecycleData)
+func (l *line) removeRecycleData() error {
+	err := l.t.q.delData(l.recycleKey)
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -104,12 +101,6 @@ func (l *line) pop() (uint64, []byte, error) {
 	}
 
 	l.head++
-	err = l.exportHead()
-	if err != nil {
-		l.head--
-		return 0, nil, err
-	}
-	// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, l.head)
 
 	if l.recycle > 0 {
 		msg := new(inflightMessage)
@@ -179,13 +170,6 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 		}
 
 		l.head++
-		err = l.exportHead()
-		if err != nil {
-			log.Printf("export head failed: %s", err)
-			l.head--
-			break
-		}
-		// log.Printf("key[%s/%s/%d] poped.", l.t.name, l.name, tid)
 		ids = append(ids, tid)
 		datas = append(datas, data)
 
@@ -266,21 +250,35 @@ func (l *line) updateiHead() {
 
 func (l *line) empty() error {
 	l.inflightLock.Lock()
-	defer l.inflightLock.Unlock()
 	l.inflight.Init()
 	l.imap = make(map[uint64]bool)
 	l.ihead = l.t.getTail()
+	l.inflightLock.Unlock()
 
 	l.headLock.Lock()
-	defer l.headLock.Unlock()
 	l.head = l.t.getTail()
+	l.headLock.Unlock()
 
-	err := l.exportHead()
+	err := l.exportLine()
 	if err != nil {
 		return err
 	}
 
 	log.Printf("line[%s] empty succ", l.name)
+	return nil
+}
+
+func (l *line) remove() error {
+	err := l.removeLineData()
+	if err != nil {
+		log.Printf("line[%s] removeLineData error: %s", err)
+	}
+
+	err = l.removeRecycleData()
+	if err != nil {
+		log.Printf("line[%s] removeRecycleData error: %s", err)
+	}
+
 	return nil
 }
 
@@ -295,9 +293,9 @@ func (l *line) stat() (*QueueStat, error) {
 	inflightLen := uint64(l.inflight.Len())
 	l.inflightLock.Unlock()
 
-	l.headLock.Lock()
+	l.headLock.RLock()
 	qs.Head = l.head
-	l.headLock.Unlock()
+	l.headLock.RUnlock()
 
 	qs.Tail = l.t.getTail()
 
@@ -324,7 +322,7 @@ func (l *line) exportLine() error {
 	}
 
 	lineStoreKey := l.t.name + "/" + l.name
-	err = l.t.q.storage.Set(lineStoreKey, buffer.Bytes())
+	err = l.t.q.setData(lineStoreKey, buffer.Bytes())
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -336,9 +334,25 @@ func (l *line) exportLine() error {
 	return nil
 }
 
+func (l *line) removeLineData() error {
+	lineStoreKey := l.t.name + "/" + l.name
+	err := l.t.q.delData(lineStoreKey)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+
+	// log.Printf("line[%s] remove finisded.", l.name)
+	return nil
+}
+
 func (l *line) genLineStore() (*lineStore, error) {
 	l.inflightLock.RLock()
 	defer l.inflightLock.RUnlock()
+	l.headLock.RLock()
+	defer l.headLock.RUnlock()
 
 	inflights := make([]inflightMessage, l.inflight.Len())
 	i := 0
@@ -350,6 +364,7 @@ func (l *line) genLineStore() (*lineStore, error) {
 	// log.Printf("inflights: %v", inflights)
 
 	ls := new(lineStore)
+	ls.Head = l.head
 	ls.Inflights = inflights
 	ls.Ihead = l.ihead
 	return ls, nil

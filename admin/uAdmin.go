@@ -29,6 +29,7 @@ func NewUqAdminServer(host string, port int, messageQueue queue.MessageQueue) (*
 		"/pop":   h.popHandler,
 		"/del":   h.delHandler,
 		"/empty": h.emptyHandler,
+		"/rm":    h.rmHandler,
 		"/stat":  h.statHandler,
 	}
 
@@ -159,6 +160,19 @@ func (h *UqAdminServer) emptyHandler(w http.ResponseWriter, req *http.Request, k
 	}
 
 	err := h.messageQueue.Empty(key)
+	if err != nil {
+		writeErrorHttp(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *UqAdminServer) rmHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !allowMethod(w, req.Method, "DELETE") {
+		return
+	}
+
+	err := h.messageQueue.Remove(key)
 	if err != nil {
 		writeErrorHttp(w, err)
 		return

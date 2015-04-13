@@ -11,6 +11,7 @@ type MessageQueue interface {
 	// admin functions
 	Create(key, recycle string) error
 	Empty(key string) error
+	Remove(key string) error
 	Stat(key string) (*QueueStat, error)
 	Close()
 }
