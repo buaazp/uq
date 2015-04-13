@@ -78,6 +78,7 @@ func main() {
 	if !checkArgs() {
 		return
 	}
+	fmt.Printf("uq started! 😄\n")
 
 	var err error
 	var storage store.Storage
@@ -165,10 +166,9 @@ func main() {
 		log.Println(http.ListenAndServe(addr, nil))
 	}()
 
-	fmt.Printf("uq started! 😄\n")
 	select {
-	case signal := <-stop:
-		log.Printf("got signal: %v", signal)
+	case <-stop:
+		// log.Printf("got signal: %v", signal)
 		adminServer.Stop()
 		entrance.Stop()
 	case <-entryFailed:

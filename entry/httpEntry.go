@@ -90,7 +90,7 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key str
 	key = topicName + "/" + lineName
 	recycle := req.FormValue("recycle")
 
-	log.Printf("creating... %s %s", key, recycle)
+	// log.Printf("creating... %s %s", key, recycle)
 	err = h.messageQueue.Create(key, recycle)
 	if err != nil {
 		writeErrorHttp(w, err)
@@ -221,7 +221,7 @@ func writeErrorHttp(w http.ResponseWriter, err error) {
 	case *Error:
 		e.WriteTo(w)
 	default:
-		log.Printf("unexpected error: %v", err)
+		// log.Printf("unexpected error: %v", err)
 		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
 	}
 }

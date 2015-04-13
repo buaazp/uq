@@ -49,7 +49,7 @@ func (r *RedisEntry) ListenAndServe() error {
 	for {
 		conn, err := r.stopListener.Accept()
 		if err != nil {
-			log.Printf("Accept failed: %s\n", err)
+			// log.Printf("Accept failed: %s\n", err)
 			return err
 		}
 		go r.handlerConn(NewSession(conn))
@@ -60,8 +60,8 @@ func (r *RedisEntry) ListenAndServe() error {
 
 func (r *RedisEntry) handlerConn(session *Session) {
 	var err error
-	addr := session.RemoteAddr().String()
-	log.Printf("handleClient: %s", addr)
+	// addr := session.RemoteAddr().String()
+	// log.Printf("handleClient: %s", addr)
 
 	for {
 		var cmd *Command
@@ -69,7 +69,7 @@ func (r *RedisEntry) handlerConn(session *Session) {
 		// 1) io.EOF
 		// 2) read tcp 127.0.0.1:51863: connection reset by peer
 		if err != nil {
-			log.Printf("session read command error: %s", err)
+			// log.Printf("session read command error: %s", err)
 			break
 		}
 		reply := r.Process(session, cmd)
@@ -81,9 +81,9 @@ func (r *RedisEntry) handlerConn(session *Session) {
 		}
 	}
 
-	log.Printf("session %s closing...", addr)
+	// log.Printf("session %s closing...", addr)
 	if err := session.Close(); err != nil {
-		log.Printf("session %s close error: %s", addr, err)
+		// log.Printf("session %s close error: %s", addr, err)
 	}
 
 	return
@@ -96,7 +96,7 @@ func (r *RedisEntry) Process(session *Session, cmd *Command) (reply *Reply) {
 
 	// varify command
 	if err := verifyCommand(cmd); err != nil {
-		log.Printf("[%s] bad command %s\n", session.RemoteAddr(), cmd)
+		// log.Printf("[%s] bad command %s\n", session.RemoteAddr(), cmd)
 		return ErrorReply(NewError(
 			ErrBadRequest,
 			err.Error(),

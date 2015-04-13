@@ -218,7 +218,7 @@ func (l *line) confirm(id uint64) error {
 		msg := m.Value.(*inflightMessage)
 		if msg.Tid == id {
 			l.inflight.Remove(m)
-			log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
+			// log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)
 			l.imap[id] = false
 			l.updateiHead()
 			return nil
@@ -250,14 +250,14 @@ func (l *line) updateiHead() {
 
 func (l *line) empty() error {
 	l.inflightLock.Lock()
+	defer l.inflightLock.Unlock()
 	l.inflight.Init()
 	l.imap = make(map[uint64]bool)
 	l.ihead = l.t.getTail()
-	l.inflightLock.Unlock()
 
 	l.headLock.Lock()
+	defer l.headLock.Unlock()
 	l.head = l.t.getTail()
-	l.headLock.Unlock()
 
 	err := l.exportLine()
 	if err != nil {
@@ -349,11 +349,6 @@ func (l *line) removeLineData() error {
 }
 
 func (l *line) genLineStore() (*lineStore, error) {
-	l.inflightLock.RLock()
-	defer l.inflightLock.RUnlock()
-	l.headLock.RLock()
-	defer l.headLock.RUnlock()
-
 	inflights := make([]inflightMessage, l.inflight.Len())
 	i := 0
 	for m := l.inflight.Front(); m != nil; m = m.Next() {

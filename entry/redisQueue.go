@@ -1,7 +1,7 @@
 package entry
 
 import (
-	"log"
+	// "log"
 
 	. "github.com/buaazp/uq/utils"
 )
@@ -10,7 +10,7 @@ func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 	recycle := cmd.StringAtIndex(2)
 
-	log.Printf("creating... %s %s", key, recycle)
+	// log.Printf("creating... %s %s", key, recycle)
 	err := r.messageQueue.Create(key, recycle)
 	if err != nil {
 		return ErrorReply(err)
@@ -96,7 +96,7 @@ func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
 
 	err := r.messageQueue.Confirm(key)
 	if err != nil {
-		log.Printf("confirm error: %s", err)
+		// log.Printf("confirm error: %s", err)
 		return ErrorReply(err)
 	}
 
@@ -105,7 +105,7 @@ func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
 
 func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
 	keys := cmd.StringArgs()[1:]
-	log.Printf("keys: %v", keys)
+	// log.Printf("keys: %v", keys)
 
 	errs := r.messageQueue.MultiConfirm(keys)
 

@@ -45,7 +45,7 @@ func (m *McEntry) ListenAndServe() error {
 	for {
 		conn, e := m.stopListener.Accept()
 		if e != nil {
-			log.Printf("Accept failed: %s\n", e)
+			// log.Printf("Accept failed: %s\n", e)
 			return e
 		}
 
@@ -56,8 +56,8 @@ func (m *McEntry) ListenAndServe() error {
 }
 
 func (m *McEntry) handlerConn(conn net.Conn) {
-	addr := conn.RemoteAddr().String()
-	log.Printf("handleClient: %s", addr)
+	// addr := conn.RemoteAddr().String()
+	// log.Printf("handleClient: %s", addr)
 
 	rbuf := bufio.NewReader(conn)
 	wbuf := bufio.NewWriter(conn)
@@ -90,9 +90,9 @@ func (m *McEntry) handlerConn(conn net.Conn) {
 		}
 	}
 
-	log.Printf("conn %s closing...", addr)
+	// log.Printf("conn %s closing...", addr)
 	if err := conn.Close(); err != nil {
-		log.Printf("conn %s close error: %s", addr, err)
+		// log.Printf("conn %s close error: %s", addr, err)
 	}
 
 	return
@@ -312,7 +312,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		key := req.Keys[0]
 		recycle := string(req.Item.Body)
 
-		log.Printf("creating... %s %s", key, recycle)
+		// log.Printf("creating... %s %s", key, recycle)
 		err = m.messageQueue.Create(key, recycle)
 		if err != nil {
 			writeErrorMc(resp, err)
@@ -367,7 +367,7 @@ func writeErrorMc(resp *Response, err error) {
 		}
 		resp.msg = e.Error()
 	default:
-		log.Printf("unexpected error: %v", err)
+		// log.Printf("unexpected error: %v", err)
 		resp.status = "SERVER_ERROR"
 		resp.msg = e.Error()
 	}
