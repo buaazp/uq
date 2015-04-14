@@ -1,8 +1,6 @@
 package entry
 
 import (
-	// "log"
-
 	. "github.com/buaazp/uq/utils"
 )
 

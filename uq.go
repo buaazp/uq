@@ -41,22 +41,10 @@ func init() {
 	flag.IntVar(&adminPort, "admin-port", 8809, "listen port")
 	flag.IntVar(&pprofPort, "pprof-port", 8080, "listen port")
 	flag.StringVar(&protocol, "protocol", "redis", "frontend interface type [redis/mc/http]")
-	flag.StringVar(&db, "db", "leveldb", "backend storage type [leveldb/memdb]")
+	flag.StringVar(&db, "db", "goleveldb", "backend storage type [goleveldb/memdb]")
 	flag.StringVar(&dir, "dir", "./data", "backend storage path")
 	flag.StringVar(&etcd, "etcd", "", "etcd service location")
 	flag.StringVar(&cluster, "cluster", "uq", "cluster name in etcd")
-}
-
-func checkArgs() bool {
-	if !belong(db, []string{"leveldb", "memdb"}) {
-		fmt.Printf("db mode %s is not supported!\n", db)
-		return false
-	}
-	if !belong(protocol, []string{"redis", "mc", "http"}) {
-		fmt.Printf("protocol %s is not supported!\n", protocol)
-		return false
-	}
-	return true
 }
 
 func belong(single string, team []string) bool {
@@ -66,6 +54,18 @@ func belong(single string, team []string) bool {
 		}
 	}
 	return false
+}
+
+func checkArgs() bool {
+	if !belong(db, []string{"goleveldb", "memdb"}) {
+		fmt.Printf("db mode %s is not supported!\n", db)
+		return false
+	}
+	if !belong(protocol, []string{"redis", "mc", "http"}) {
+		fmt.Printf("protocol %s is not supported!\n", protocol)
+		return false
+	}
+	return true
 }
 
 func main() {
@@ -82,12 +82,15 @@ func main() {
 
 	var err error
 	var storage store.Storage
-	if db == "leveldb" {
+	if db == "goleveldb" {
 		dbpath := path.Clean(path.Join(dir, "uq.db"))
 		log.Printf("dbpath: %s", dbpath)
 		storage, err = store.NewLevelStore(dbpath)
 	} else if db == "memdb" {
 		storage, err = store.NewMemStore()
+	} else {
+		fmt.Printf("store %s is not supported!\n", db)
+		return
 	}
 	if err != nil {
 		fmt.Printf("store init error: %s\n", err)
@@ -113,6 +116,9 @@ func main() {
 		entrance, err = entry.NewMcEntry(host, port, messageQueue)
 	} else if protocol == "redis" {
 		entrance, err = entry.NewRedisEntry(host, port, messageQueue)
+	} else {
+		fmt.Printf("protocol %s is not supported!\n", protocol)
+		return
 	}
 	if err != nil {
 		fmt.Printf("entry init error: %s\n", err)

@@ -57,6 +57,84 @@ func (l *line) removeRecycleData() error {
 	return nil
 }
 
+func (l *line) genLineStore() (*lineStore, error) {
+	inflights := make([]inflightMessage, l.inflight.Len())
+	i := 0
+	for m := l.inflight.Front(); m != nil; m = m.Next() {
+		msg := m.Value.(*inflightMessage)
+		inflights[i] = *msg
+		i++
+	}
+	// log.Printf("inflights: %v", inflights)
+
+	ls := new(lineStore)
+	ls.Head = l.head
+	ls.Inflights = inflights
+	ls.Ihead = l.ihead
+	return ls, nil
+}
+
+func (l *line) exportLine() error {
+	// log.Printf("start export line[%s]...", l.name)
+	lineStoreValue, err := l.genLineStore()
+	if err != nil {
+		return err
+	}
+
+	buffer := bytes.NewBuffer(nil)
+	enc := gob.NewEncoder(buffer)
+	err = enc.Encode(lineStoreValue)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+
+	lineStoreKey := l.t.name + "/" + l.name
+	err = l.t.q.setData(lineStoreKey, buffer.Bytes())
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+
+	// log.Printf("line[%s] export finisded.", l.name)
+	return nil
+}
+
+func (l *line) removeLineData() error {
+	lineStoreKey := l.t.name + "/" + l.name
+	err := l.t.q.delData(lineStoreKey)
+	if err != nil {
+		return NewError(
+			ErrInternalError,
+			err.Error(),
+		)
+	}
+
+	// log.Printf("line[%s] remove finisded.", l.name)
+	return nil
+}
+
+func (l *line) updateiHead() {
+	for l.ihead < l.head {
+		id := l.ihead
+		fl, ok := l.imap[id]
+		if !ok {
+			l.ihead++
+			continue
+		}
+		if fl {
+			return
+		} else {
+			delete(l.imap, id)
+			l.ihead++
+		}
+	}
+}
+
 func (l *line) pop() (uint64, []byte, error) {
 	l.inflightLock.Lock()
 	defer l.inflightLock.Unlock()
@@ -231,21 +309,23 @@ func (l *line) confirm(id uint64) error {
 	)
 }
 
-func (l *line) updateiHead() {
-	for l.ihead < l.head {
-		id := l.ihead
-		fl, ok := l.imap[id]
-		if !ok {
-			l.ihead++
-			continue
-		}
-		if fl {
-			return
-		} else {
-			delete(l.imap, id)
-			l.ihead++
-		}
-	}
+func (l *line) stat() (*QueueStat, error) {
+	l.inflightLock.RLock()
+	defer l.inflightLock.RUnlock()
+	l.headLock.RLock()
+	defer l.headLock.RUnlock()
+
+	qs := new(QueueStat)
+	qs.Name = l.t.name + "/" + l.name
+	qs.Type = "line"
+	qs.Recycle = l.recycle.String()
+	qs.IHead = l.ihead
+	inflightLen := uint64(l.inflight.Len())
+	qs.Head = l.head
+	qs.Tail = l.t.getTail()
+	qs.Count = inflightLen + qs.Tail - qs.Head
+
+	return qs, nil
 }
 
 func (l *line) empty() error {
@@ -279,88 +359,6 @@ func (l *line) remove() error {
 		log.Printf("line[%s] removeRecycleData error: %s", err)
 	}
 
+	log.Printf("line[%s] remove succ", l.name)
 	return nil
-}
-
-func (l *line) stat() (*QueueStat, error) {
-	qs := new(QueueStat)
-	qs.Name = l.t.name + "/" + l.name
-	qs.Type = "line"
-	qs.Recycle = l.recycle.String()
-
-	l.inflightLock.Lock()
-	qs.IHead = l.ihead
-	inflightLen := uint64(l.inflight.Len())
-	l.inflightLock.Unlock()
-
-	l.headLock.RLock()
-	qs.Head = l.head
-	l.headLock.RUnlock()
-
-	qs.Tail = l.t.getTail()
-
-	qs.Count = inflightLen + qs.Tail - qs.Head
-
-	return qs, nil
-}
-
-func (l *line) exportLine() error {
-	// log.Printf("start export line[%s]...", l.name)
-	lineStoreValue, err := l.genLineStore()
-	if err != nil {
-		return err
-	}
-
-	buffer := bytes.NewBuffer(nil)
-	enc := gob.NewEncoder(buffer)
-	err = enc.Encode(lineStoreValue)
-	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
-	}
-
-	lineStoreKey := l.t.name + "/" + l.name
-	err = l.t.q.setData(lineStoreKey, buffer.Bytes())
-	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
-	}
-
-	// log.Printf("line[%s] export finisded.", l.name)
-	return nil
-}
-
-func (l *line) removeLineData() error {
-	lineStoreKey := l.t.name + "/" + l.name
-	err := l.t.q.delData(lineStoreKey)
-	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
-	}
-
-	// log.Printf("line[%s] remove finisded.", l.name)
-	return nil
-}
-
-func (l *line) genLineStore() (*lineStore, error) {
-	inflights := make([]inflightMessage, l.inflight.Len())
-	i := 0
-	for m := l.inflight.Front(); m != nil; m = m.Next() {
-		msg := m.Value.(*inflightMessage)
-		inflights[i] = *msg
-		i++
-	}
-	// log.Printf("inflights: %v", inflights)
-
-	ls := new(lineStore)
-	ls.Head = l.head
-	ls.Inflights = inflights
-	ls.Ihead = l.ihead
-	return ls, nil
 }

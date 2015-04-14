@@ -11,6 +11,8 @@ type StopListener struct {
 	stop             chan int //Channel used only to indicate listener should shutdown
 }
 
+var StoppedError = errors.New("Listener stopped")
+
 func NewStopListener(l net.Listener) (*StopListener, error) {
 	tcpL, ok := l.(*net.TCPListener)
 
@@ -24,8 +26,6 @@ func NewStopListener(l net.Listener) (*StopListener, error) {
 
 	return retval, nil
 }
-
-var StoppedError = errors.New("Listener stopped")
 
 func (sl *StopListener) Accept() (net.Conn, error) {
 	for {

@@ -223,7 +223,6 @@ func (s *Session) replyBulk(bulk interface{}) (err error) {
 	// NULL Bulk Reply
 	isnil := bulk == nil
 	if !isnil {
-		// []byte 需要类型转换后才能判断
 		b, ok := bulk.([]byte)
 		isnil = ok && b == nil
 	}

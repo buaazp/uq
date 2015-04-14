@@ -27,8 +27,8 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 		"/push":  h.pushHandler,
 		"/pop":   h.popHandler,
 		"/del":   h.delHandler,
-		"/empty": h.emptyHandler,
 		"/stat":  h.statHandler,
+		"/empty": h.emptyHandler,
 	}
 
 	addr := Addrcat(host, port)
@@ -57,22 +57,8 @@ func (h *HttpEntry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-// allowMethod verifies that the given method is one of the allowed methods,
-// and if not, it writes an error to w.  A boolean is returned indicating
-// whether or not the method is allowed.
-func allowMethod(w http.ResponseWriter, m string, ms ...string) bool {
-	for _, meth := range ms {
-		if m == meth {
-			return true
-		}
-	}
-	w.Header().Set("Allow", strings.Join(ms, ","))
-	http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
-	return false
-}
-
 func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !allowMethod(w, req.Method, "PUT", "POST") {
+	if !AllowMethod(w, req.Method, "PUT", "POST") {
 		return
 	}
 
@@ -100,7 +86,7 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key str
 }
 
 func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !allowMethod(w, req.Method, "PUT", "POST") {
+	if !AllowMethod(w, req.Method, "PUT", "POST") {
 		return
 	}
 
@@ -123,7 +109,7 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key st
 }
 
 func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !allowMethod(w, req.Method, "HEAD", "GET") {
+	if !AllowMethod(w, req.Method, "HEAD", "GET") {
 		return
 	}
 
@@ -140,7 +126,7 @@ func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key str
 }
 
 func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !allowMethod(w, req.Method, "DELETE") {
+	if !AllowMethod(w, req.Method, "DELETE") {
 		return
 	}
 
@@ -152,21 +138,8 @@ func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key str
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !allowMethod(w, req.Method, "DELETE") {
-		return
-	}
-
-	err := h.messageQueue.Empty(key)
-	if err != nil {
-		writeErrorHttp(w, err)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !allowMethod(w, req.Method, "HEAD", "GET") {
+	if !AllowMethod(w, req.Method, "HEAD", "GET") {
 		return
 	}
 
@@ -188,6 +161,19 @@ func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key st
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(data)
+}
+
+func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if !AllowMethod(w, req.Method, "DELETE") {
+		return
+	}
+
+	err := h.messageQueue.Empty(key)
+	if err != nil {
+		writeErrorHttp(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *HttpEntry) ListenAndServe() error {
