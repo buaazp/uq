@@ -38,10 +38,7 @@ func (l *line) exportRecycle() error {
 	lineRecycleData := []byte(l.recycle.String())
 	err := l.t.q.setData(l.recycleKey, lineRecycleData)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 	return nil
 }
@@ -49,10 +46,7 @@ func (l *line) exportRecycle() error {
 func (l *line) removeRecycleData() error {
 	err := l.t.q.delData(l.recycleKey)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 	return nil
 }
@@ -82,19 +76,13 @@ func (l *line) exportLine() error {
 	enc := gob.NewEncoder(buffer)
 	err := enc.Encode(lineStoreValue)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 
 	lineStoreKey := l.t.name + "/" + l.name
 	err = l.t.q.setData(lineStoreKey, buffer.Bytes())
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 
 	// log.Printf("line[%s] export finisded.", l.name)
@@ -105,10 +93,7 @@ func (l *line) removeLineData() error {
 	lineStoreKey := l.t.name + "/" + l.name
 	err := l.t.q.delData(lineStoreKey)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 
 	// log.Printf("line[%s] remove finisded.", l.name)

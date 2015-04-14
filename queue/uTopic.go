@@ -63,10 +63,7 @@ func (t *topic) exportHead() error {
 	binary.LittleEndian.PutUint64(topicHeadData, t.head)
 	err := t.q.setData(t.headKey, topicHeadData)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 	return nil
 }
@@ -74,10 +71,7 @@ func (t *topic) exportHead() error {
 func (t *topic) removeHeadData() error {
 	err := t.q.delData(t.headKey)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 	return nil
 }
@@ -87,10 +81,7 @@ func (t *topic) exportTail() error {
 	binary.LittleEndian.PutUint64(topicTailData, t.tail)
 	err := t.q.setData(t.tailKey, topicTailData)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 	return nil
 }
@@ -98,10 +89,7 @@ func (t *topic) exportTail() error {
 func (t *topic) removeTailData() error {
 	err := t.q.delData(t.tailKey)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 	return nil
 }
@@ -135,10 +123,7 @@ func (t *topic) exportTopic() error {
 
 	err = t.q.setData(t.name, buffer.Bytes())
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 
 	// log.Printf("topic[%s] export finisded.", t.name)
@@ -148,10 +133,7 @@ func (t *topic) exportTopic() error {
 func (t *topic) removeTopicData() error {
 	err := t.q.delData(t.name)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return err
 	}
 	return nil
 }
@@ -183,10 +165,7 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	l.recycleKey = t.name + "/" + lineName + KeyLineRecycle
 	lineRecycleData, err := t.q.getData(l.recycleKey)
 	if err != nil {
-		return nil, NewError(
-			ErrInternalError,
-			err.Error(),
-		)
+		return nil, err
 	}
 	lineRecycle, err := time.ParseDuration(string(lineRecycleData))
 	if err != nil {
@@ -272,7 +251,7 @@ func (t *topic) clean() (quit bool) {
 		key := Acatui(t.name, ":", t.head)
 		err := t.q.delData(key)
 		if err != nil {
-			// log.Printf("topic[%s] del data[%s] error; %s", t.name, key, err)
+			log.Printf("topic[%s] del %s error; %s", t.name, key, err)
 			return
 		}
 
