@@ -57,6 +57,19 @@ func (h *HttpEntry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
+func writeErrorHttp(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
+	}
+	switch e := err.(type) {
+	case *Error:
+		e.WriteTo(w)
+	default:
+		// log.Printf("unexpected error: %v", err)
+		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key string) {
 	if !AllowMethod(w, req.Method, "PUT", "POST") {
 		return
@@ -197,17 +210,4 @@ func (h *HttpEntry) Stop() {
 	log.Printf("http entry stoping...")
 	h.stopListener.Stop()
 	h.messageQueue.Close()
-}
-
-func writeErrorHttp(w http.ResponseWriter, err error) {
-	if err == nil {
-		return
-	}
-	switch e := err.(type) {
-	case *Error:
-		e.WriteTo(w)
-	default:
-		// log.Printf("unexpected error: %v", err)
-		http.Error(w, "500 Internal Error!\r\n"+err.Error(), http.StatusInternalServerError)
-	}
 }

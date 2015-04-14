@@ -57,7 +57,7 @@ func (l *line) removeRecycleData() error {
 	return nil
 }
 
-func (l *line) genLineStore() (*lineStore, error) {
+func (l *line) genLineStore() *lineStore {
 	inflights := make([]inflightMessage, l.inflight.Len())
 	i := 0
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
@@ -71,19 +71,16 @@ func (l *line) genLineStore() (*lineStore, error) {
 	ls.Head = l.head
 	ls.Inflights = inflights
 	ls.Ihead = l.ihead
-	return ls, nil
+	return ls
 }
 
 func (l *line) exportLine() error {
 	// log.Printf("start export line[%s]...", l.name)
-	lineStoreValue, err := l.genLineStore()
-	if err != nil {
-		return err
-	}
+	lineStoreValue := l.genLineStore()
 
 	buffer := bytes.NewBuffer(nil)
 	enc := gob.NewEncoder(buffer)
-	err = enc.Encode(lineStoreValue)
+	err := enc.Encode(lineStoreValue)
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -309,7 +306,7 @@ func (l *line) confirm(id uint64) error {
 	)
 }
 
-func (l *line) stat() (*QueueStat, error) {
+func (l *line) stat() *QueueStat {
 	l.inflightLock.RLock()
 	defer l.inflightLock.RUnlock()
 	l.headLock.RLock()
@@ -325,7 +322,7 @@ func (l *line) stat() (*QueueStat, error) {
 	qs.Tail = l.t.getTail()
 	qs.Count = inflightLen + qs.Tail - qs.Head
 
-	return qs, nil
+	return qs
 }
 
 func (l *line) empty() error {

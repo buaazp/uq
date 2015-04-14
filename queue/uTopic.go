@@ -106,7 +106,7 @@ func (t *topic) removeTailData() error {
 	return nil
 }
 
-func (t *topic) genTopicStore() (*topicStore, error) {
+func (t *topic) genTopicStore() *topicStore {
 	lines := make([]string, len(t.lines))
 	i := 0
 	for _, line := range t.lines {
@@ -117,18 +117,15 @@ func (t *topic) genTopicStore() (*topicStore, error) {
 	ts := new(topicStore)
 	ts.Lines = lines
 
-	return ts, nil
+	return ts
 }
 
 func (t *topic) exportTopic() error {
-	topicStoreValue, err := t.genTopicStore()
-	if err != nil {
-		return err
-	}
+	topicStoreValue := t.genTopicStore()
 
 	buffer := bytes.NewBuffer(nil)
 	enc := gob.NewEncoder(buffer)
-	err = enc.Encode(topicStoreValue)
+	err := enc.Encode(topicStoreValue)
 	if err != nil {
 		return NewError(
 			ErrInternalError,
@@ -216,10 +213,6 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	l.t = t
 
 	t.q.registerLine(t.name, l.name, l.recycle.String())
-	// err = t.q.registerLine(t.name, l.name, l.recycle.String())
-	// if err != nil {
-	// 	log.Printf("topic[%s] register line error: %s", t.name, err)
-	// }
 	return l, nil
 }
 
@@ -369,14 +362,6 @@ func (t *topic) createLine(name string, recycle time.Duration, fromEtcd bool) er
 		return err
 	}
 
-	if !fromEtcd {
-		t.q.registerLine(t.name, l.name, l.recycle.String())
-		// err := t.q.registerLine(t.name, l.name, l.recycle.String())
-		// if err != nil {
-		// 	log.Printf("topic[%s] register line error: %s", t.name, err)
-		// }
-	}
-
 	t.lines[name] = l
 
 	err = t.exportTopic()
@@ -385,6 +370,10 @@ func (t *topic) createLine(name string, recycle time.Duration, fromEtcd bool) er
 		delete(t.lines, name)
 		t.linesLock.Unlock()
 		return err
+	}
+
+	if !fromEtcd {
+		t.q.registerLine(t.name, l.name, l.recycle.String())
 	}
 
 	log.Printf("topic[%s] line[%s:%v] created.", t.name, name, recycle)
@@ -418,13 +407,6 @@ func (t *topic) mPush(datas [][]byte) error {
 
 	oldTail := t.tail
 	for _, data := range datas {
-		if len(data) <= 0 {
-			return NewError(
-				ErrBadRequest,
-				`message has no content`,
-			)
-		}
-
 		key := Acatui(t.name, ":", t.tail)
 		err := t.q.setData(key, data)
 		if err != nil {
@@ -501,10 +483,11 @@ func (t *topic) statLine(name string) (*QueueStat, error) {
 		)
 	}
 
-	return l.stat()
+	qs := l.stat()
+	return qs, nil
 }
 
-func (t *topic) stat() (*QueueStat, error) {
+func (t *topic) stat() *QueueStat {
 	qs := new(QueueStat)
 	qs.Name = t.name
 	qs.Type = "topic"
@@ -520,17 +503,12 @@ func (t *topic) stat() (*QueueStat, error) {
 	qs.Count = qs.Tail - qs.Head
 
 	qs.Lines = make([]*QueueStat, 0)
-	for name, l := range t.lines {
-		//TODO: print lines
-		ls, err := l.stat()
-		if err != nil {
-			log.Printf("topic[%s] lien[%s] stat error: %s", t.name, name, err)
-			continue
-		}
+	for _, l := range t.lines {
+		ls := l.stat()
 		qs.Lines = append(qs.Lines, ls)
 	}
 
-	return qs, nil
+	return qs
 }
 
 func (t *topic) emptyLine(name string) error {
@@ -591,13 +569,6 @@ func (t *topic) removeLine(name string, fromEtcd bool) error {
 		)
 	}
 
-	if !fromEtcd {
-		err := t.q.unRegisterLine(t.name, name)
-		if err != nil {
-			return err
-		}
-	}
-
 	delete(t.lines, name)
 	err := t.exportTopic()
 	if err != nil {
@@ -605,6 +576,10 @@ func (t *topic) removeLine(name string, fromEtcd bool) error {
 		t.lines[name] = l
 		t.linesLock.Unlock()
 		return err
+	}
+
+	if !fromEtcd {
+		t.q.unRegisterLine(t.name, name)
 	}
 
 	return l.remove()
