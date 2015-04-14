@@ -30,6 +30,7 @@ var (
 	protocol  string
 	db        string
 	dir       string
+	logFile   string
 	etcd      string
 	cluster   string
 )
@@ -43,6 +44,7 @@ func init() {
 	flag.StringVar(&protocol, "protocol", "redis", "frontend interface type [redis/mc/http]")
 	flag.StringVar(&db, "db", "goleveldb", "backend storage type [goleveldb/memdb]")
 	flag.StringVar(&dir, "dir", "./data", "backend storage path")
+	flag.StringVar(&logFile, "log", "", "uq log path")
 	flag.StringVar(&etcd, "etcd", "", "etcd service location")
 	flag.StringVar(&cluster, "cluster", "uq", "cluster name in etcd")
 }
@@ -70,8 +72,26 @@ func checkArgs() bool {
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	defer func() {
+		fmt.Printf("byebye! uq see u later! 😄\n")
+	}()
+
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		fmt.Printf("mkdir %s error: %s\n", dir, err)
+		return
+	}
+	if logFile == "" {
+		logFile = path.Join(dir, "uq.log")
+	}
+	logf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Printf("log open error: %s\n", err)
+		return
+	}
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Lmicroseconds)
 	log.SetPrefix("[uq] ")
+	log.SetOutput(logf)
 
 	flag.Parse()
 
@@ -80,7 +100,6 @@ func main() {
 	}
 	fmt.Printf("uq started! 😄\n")
 
-	var err error
 	var storage store.Storage
 	if db == "goleveldb" {
 		dbpath := path.Clean(path.Join(dir, "uq.db"))
@@ -183,5 +202,4 @@ func main() {
 		entrance.Stop()
 	}
 	wg.Wait()
-	fmt.Printf("byebye! uq see u later! 😄\n")
 }
