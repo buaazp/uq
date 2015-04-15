@@ -165,7 +165,7 @@ func main() {
 	}(entryFailed)
 
 	var adminServer admin.AdminServer
-	adminServer, err = admin.NewUqAdminServer(host, adminPort, messageQueue)
+	adminServer, err = admin.NewAdminServer(host, adminPort, messageQueue)
 	if err != nil {
 		fmt.Printf("admin init error: %s\n", err)
 		entrance.Stop()

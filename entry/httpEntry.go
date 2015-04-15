@@ -10,10 +10,15 @@ import (
 	. "github.com/buaazp/uq/utils"
 )
 
+const (
+	queuePrefixV1 = "/v1/queues"
+	adminPrefixV1 = "/v1/admin"
+)
+
 type HttpEntry struct {
 	host         string
 	port         int
-	mux          map[string]func(http.ResponseWriter, *http.Request, string)
+	adminMux     map[string]func(http.ResponseWriter, *http.Request, string)
 	server       *http.Server
 	stopListener *StopListener
 	messageQueue queue.MessageQueue
@@ -22,13 +27,10 @@ type HttpEntry struct {
 func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*HttpEntry, error) {
 	h := new(HttpEntry)
 
-	h.mux = map[string]func(http.ResponseWriter, *http.Request, string){
-		"/add":   h.addHandler,
-		"/push":  h.pushHandler,
-		"/pop":   h.popHandler,
-		"/del":   h.delHandler,
+	h.adminMux = map[string]func(http.ResponseWriter, *http.Request, string){
 		"/stat":  h.statHandler,
 		"/empty": h.emptyHandler,
+		"/rm":    h.rmHandler,
 	}
 
 	addr := Addrcat(host, port)
@@ -45,9 +47,44 @@ func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*Http
 }
 
 func (h *HttpEntry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	for prefix, handler := range h.mux {
-		if strings.HasPrefix(req.URL.Path, prefix) {
-			key := req.URL.Path[len(prefix):]
+	if !AllowMethod(w, req.Method, "HEAD", "GET", "POST", "PUT", "DELETE") {
+		return
+	}
+
+	if strings.HasPrefix(req.URL.Path, queuePrefixV1) {
+		key := req.URL.Path[len(queuePrefixV1):]
+		h.queueHandler(w, req, key)
+		return
+	} else if strings.HasPrefix(req.URL.Path, adminPrefixV1) {
+		key := req.URL.Path[len(adminPrefixV1):]
+		h.adminHandler(w, req, key)
+		return
+	}
+
+	http.Error(w, "404 Not Found!", http.StatusNotFound)
+	return
+}
+
+func (h *HttpEntry) queueHandler(w http.ResponseWriter, req *http.Request, key string) {
+	switch req.Method {
+	case "PUT":
+		h.addHandler(w, req, key)
+	case "POST":
+		h.pushHandler(w, req, key)
+	case "GET":
+		h.popHandler(w, req, key)
+	case "DELETE":
+		h.delHandler(w, req, key)
+	default:
+		http.Error(w, "405 Method Not Allowed!", http.StatusMethodNotAllowed)
+	}
+	return
+}
+
+func (h *HttpEntry) adminHandler(w http.ResponseWriter, req *http.Request, key string) {
+	for prefix, handler := range h.adminMux {
+		if strings.HasPrefix(key, prefix) {
+			key = key[len(prefix):]
 			handler(w, req, key)
 			return
 		}
@@ -71,10 +108,6 @@ func writeErrorHttp(w http.ResponseWriter, err error) {
 }
 
 func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !AllowMethod(w, req.Method, "PUT", "POST") {
-		return
-	}
-
 	err := req.ParseForm()
 	if err != nil {
 		writeErrorHttp(w, NewError(
@@ -95,14 +128,10 @@ func (h *HttpEntry) addHandler(w http.ResponseWriter, req *http.Request, key str
 		writeErrorHttp(w, err)
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusCreated)
 }
 
 func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !AllowMethod(w, req.Method, "PUT", "POST") {
-		return
-	}
-
 	err := req.ParseForm()
 	if err != nil {
 		writeErrorHttp(w, NewError(
@@ -122,10 +151,6 @@ func (h *HttpEntry) pushHandler(w http.ResponseWriter, req *http.Request, key st
 }
 
 func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !AllowMethod(w, req.Method, "HEAD", "GET") {
-		return
-	}
-
 	id, data, err := h.messageQueue.Pop(key)
 	if err != nil {
 		writeErrorHttp(w, err)
@@ -139,10 +164,6 @@ func (h *HttpEntry) popHandler(w http.ResponseWriter, req *http.Request, key str
 }
 
 func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !AllowMethod(w, req.Method, "DELETE") {
-		return
-	}
-
 	err := h.messageQueue.Confirm(key)
 	if err != nil {
 		writeErrorHttp(w, err)
@@ -152,7 +173,8 @@ func (h *HttpEntry) delHandler(w http.ResponseWriter, req *http.Request, key str
 }
 
 func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !AllowMethod(w, req.Method, "HEAD", "GET") {
+	if req.Method != "GET" {
+		http.Error(w, "405 Method Not Allowed!", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -162,6 +184,7 @@ func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key st
 		return
 	}
 
+	log.Printf("qs: %v", qs)
 	data, err := qs.ToJson()
 	if err != nil {
 		writeErrorHttp(w, NewError(
@@ -177,11 +200,26 @@ func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key st
 }
 
 func (h *HttpEntry) emptyHandler(w http.ResponseWriter, req *http.Request, key string) {
-	if !AllowMethod(w, req.Method, "DELETE") {
+	if req.Method != "DELETE" {
+		http.Error(w, "405 Method Not Allowed!", http.StatusMethodNotAllowed)
 		return
 	}
 
 	err := h.messageQueue.Empty(key)
+	if err != nil {
+		writeErrorHttp(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HttpEntry) rmHandler(w http.ResponseWriter, req *http.Request, key string) {
+	if req.Method != "DELETE" {
+		http.Error(w, "405 Method Not Allowed!", http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := h.messageQueue.Remove(key)
 	if err != nil {
 		writeErrorHttp(w, err)
 		return
