@@ -326,9 +326,11 @@ The default storage of uq is goleveldb. It stores all the data in disk. So the m
 
 If you need a more fast uq, you can use memory to store the messages. But if uq shutdown, the messages will lose.
 
-### Unit Tests
+Other storage like rocksdb, leveldb will be supported in the future.
 
-Uq’s funtions have been tested. You can test it by yourself after install goconvey:
+### Unit Test
+
+Uq’s main funtions in package amdin/entry/queue/store/utils have been tested. You can test it by yourself after installing goconvey:
 
 ```
 go get github.com/smartystreets/goconvey
@@ -337,6 +339,36 @@ goconvey
 ```
 
 ![Unit Tests Result](http://ww4.sinaimg.cn/large/4c422e03jw1era17icm96j212q0oowl3.jpg)
+
+### Benchmark Test
+
+This benchmark test is between uq and memcacheQ v0.2.0 in my 13’ Macbook Pro early 2011 with SSD. Uq is started with:
+
+```
+./uq -protocol mc
+```
+
+MemcacheQ is started with:
+
+```
+memcacheq -p 8808 -r -c 1024 -H ./mcq_data/ -N -R -L 1024 -A 65536 -T 15 -B 8192 -m 256 -E 4096
+```
+
+The test tool is `test/mc_bench.go`. Build and start with:
+
+```
+go build mc_bench.go
+./mc_bench -c 10 -n 500000 -m push
+```
+
+The result of benchmark test is:
+
+|  Program  |       QPS      | Throughput |
+| :-------- |:--------------:| ----------:|
+| memcacheQ | 4169.952 msg/s | 0.795 MB/s |
+| UQ        | 3471.060 msg/s | 0.662 MB/s |
+
+Uq is about 17% slower than memcachedQ now. We need more optimization measures to improve the performance of uq.
 
 ### Feedback:
 

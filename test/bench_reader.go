@@ -47,10 +47,8 @@ func main() {
 		return
 	}
 
-	qr := new(queue.QueueRequest)
-	qr.TopicName = *topic
-	qr.LineName = "x"
-	err = messageQueue.Create(qr)
+	key := *topic + "/x"
+	err = messageQueue.Create(key, "")
 	if err != nil {
 		if e := err.(*Error); e.ErrorCode != ErrLineExisted {
 			fmt.Printf("line create error: %s\n", err)

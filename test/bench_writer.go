@@ -49,9 +49,7 @@ func main() {
 		return
 	}
 
-	qr := new(queue.QueueRequest)
-	qr.TopicName = *topic
-	err = messageQueue.Create(qr)
+	err = messageQueue.Create(*topic, "")
 	if err != nil {
 		if e := err.(*Error); e.ErrorCode != ErrTopicExisted {
 			fmt.Printf("topic create error: %s\n", err)
