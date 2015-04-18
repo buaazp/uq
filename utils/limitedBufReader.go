@@ -1,6 +1,11 @@
-package entry
+package utils
 
 import "io"
+
+type limitedBufferReader struct {
+	r io.Reader
+	n int
+}
 
 // NewLimitedBufferReader returns a reader that reads from the given reader
 // but limits the amount of data returned to at most n bytes.
@@ -9,11 +14,6 @@ func NewLimitedBufferReader(r io.Reader, n int) io.Reader {
 		r: r,
 		n: n,
 	}
-}
-
-type limitedBufferReader struct {
-	r io.Reader
-	n int
 }
 
 func (r *limitedBufferReader) Read(p []byte) (n int, err error) {

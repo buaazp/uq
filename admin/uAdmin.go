@@ -1,4 +1,4 @@
-package entry
+package admin
 
 import (
 	"log"
@@ -24,7 +24,7 @@ type HttpEntry struct {
 	messageQueue queue.MessageQueue
 }
 
-func NewHttpEntry(host string, port int, messageQueue queue.MessageQueue) (*HttpEntry, error) {
+func NewAdminServer(host string, port int, messageQueue queue.MessageQueue) (*HttpEntry, error) {
 	h := new(HttpEntry)
 
 	h.adminMux = map[string]func(http.ResponseWriter, *http.Request, string){
@@ -240,12 +240,11 @@ func (h *HttpEntry) ListenAndServe() error {
 	}
 	h.stopListener = stopListener
 
-	log.Printf("http entrance serving at %s...", addr)
+	log.Printf("admin server serving at %s...", addr)
 	return h.server.Serve(h.stopListener)
 }
 
 func (h *HttpEntry) Stop() {
-	log.Printf("http entry stoping...")
+	log.Printf("admin server stoping...")
 	h.stopListener.Stop()
-	h.messageQueue.Close()
 }

@@ -2,7 +2,6 @@ package entry
 
 import (
 	"bufio"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -20,84 +19,6 @@ type McEntry struct {
 	messageQueue queue.MessageQueue
 }
 
-func NewMcEntry(host string, port int, messageQueue queue.MessageQueue) (*McEntry, error) {
-	mc := new(McEntry)
-	mc.host = host
-	mc.port = port
-	mc.messageQueue = messageQueue
-	return mc, nil
-}
-
-func (m *McEntry) ListenAndServe() error {
-	addr := Addrcat(m.host, m.port)
-	l, err := net.Listen("tcp", addr)
-	if err != nil {
-		return err
-	}
-
-	stopListener, err := NewStopListener(l)
-	if err != nil {
-		return err
-	}
-	m.stopListener = stopListener
-
-	log.Printf("mc entrance serving at %s...", addr)
-	for {
-		conn, e := m.stopListener.Accept()
-		if e != nil {
-			log.Printf("Accept failed: %s\n", e)
-			return e
-		}
-
-		go m.handlerConn(conn)
-	}
-
-	return nil
-}
-
-func (m *McEntry) handlerConn(conn net.Conn) {
-	addr := conn.RemoteAddr().String()
-	log.Printf("handleClient: %s", addr)
-
-	rbuf := bufio.NewReader(conn)
-	wbuf := bufio.NewWriter(conn)
-
-	for {
-		req, err := m.Read(rbuf)
-		if err != nil {
-			if err == io.EOF {
-				break
-			} else {
-				resp := new(Response)
-				writeErrorMc(resp, err)
-				resp.Write(wbuf)
-				wbuf.Flush()
-				continue
-			}
-		}
-
-		resp, quit := m.Process(req)
-		if quit {
-			break
-		}
-		if resp == nil {
-			continue
-		}
-		if !resp.noreply {
-			resp.Write(wbuf)
-			wbuf.Flush()
-			continue
-		}
-	}
-
-	log.Printf("conn %s closing...", addr)
-	if err := conn.Close(); err != nil {
-		log.Printf("conn %s close error: %s", addr, err)
-	}
-
-	return
-}
-
 type Item struct {
 	Flag    int
 	Exptime int
@@ -110,6 +31,14 @@ type Request struct {
 	Keys    []string // key
 	Item    *Item
 	NoReply bool
+}
+
+func NewMcEntry(host string, port int, messageQueue queue.MessageQueue) (*McEntry, error) {
+	mc := new(McEntry)
+	mc.host = host
+	mc.port = port
+	mc.messageQueue = messageQueue
+	return mc, nil
 }
 
 func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
@@ -138,7 +67,7 @@ func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
 	req := new(Request)
 	req.Cmd = parts[0]
 	switch req.Cmd {
-	case "get", "gets":
+	case "get", "gets", "stats":
 		if len(parts) < 2 {
 			return nil, NewError(
 				ErrBadRequest,
@@ -227,7 +156,6 @@ func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
 	case "quit", "version", "flush_all":
 	case "replace", "cas", "append", "prepend":
 	case "incr", "decr":
-	case "stats":
 	case "verbosity":
 
 	default:
@@ -239,11 +167,23 @@ func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
 	return req, nil
 }
 
-type Response struct {
-	status  string
-	msg     string
-	noreply bool
-	items   map[string]*Item
+func writeErrorMc(resp *Response, err error) {
+	if err == nil {
+		return
+	}
+	switch e := err.(type) {
+	case *Error:
+		if e.ErrorCode >= 500 {
+			resp.status = "SERVER_ERROR"
+		} else {
+			resp.status = "CLIENT_ERROR"
+		}
+		resp.msg = e.Error()
+	default:
+		// log.Printf("unexpected error: %v", err)
+		resp.status = "SERVER_ERROR"
+		resp.msg = e.Error()
+	}
 }
 
 func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
@@ -286,11 +226,34 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 
 		resp.items = items
 
+	case "stats":
+		key := req.Keys[0]
+		resp.status = "STAT"
+		qs, err := m.messageQueue.Stat(key)
+		if err != nil {
+			writeErrorMc(resp, err)
+			return
+		}
+
+		// for human reading
+		resp.msg = qs.ToMcString()
+
+		// for json format
+		// data, err := qs.ToJson()
+		// if err != nil {
+		// 	writeErrorMc(resp, NewError(
+		// 		ErrInternalError,
+		// 		err.Error(),
+		// 	))
+		// 	return
+		// }
+		// resp.msg = string(data)
+
 	case "add":
 		key := req.Keys[0]
 		recycle := string(req.Item.Body)
 
-		log.Printf("creating... %s %s", key, recycle)
+		// log.Printf("creating... %s %s", key, recycle)
 		err = m.messageQueue.Create(key, recycle)
 		if err != nil {
 			writeErrorMc(resp, err)
@@ -332,64 +295,74 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 	return
 }
 
-func writeErrorMc(resp *Response, err error) {
-	if err == nil {
-		return
-	}
-	switch e := err.(type) {
-	case *Error:
-		if e.ErrorCode >= 500 {
-			resp.status = "SERVER_ERROR"
-		} else {
-			resp.status = "CLIENT_ERROR"
-		}
-		resp.msg = e.Error()
-	default:
-		log.Printf("unexpected error: %v", err)
-		resp.status = "SERVER_ERROR"
-		resp.msg = e.Error()
-	}
-}
+func (m *McEntry) handlerConn(conn net.Conn) {
+	// addr := conn.RemoteAddr().String()
+	// log.Printf("handleClient: %s", addr)
 
-func (resp *Response) Write(w io.Writer) error {
-	if resp.noreply {
-		return nil
-	}
+	rbuf := bufio.NewReader(conn)
+	wbuf := bufio.NewWriter(conn)
 
-	switch resp.status {
-	case "VALUE":
-		if resp.items != nil {
-			for key, item := range resp.items {
-				fmt.Fprintf(w, "VALUE %s %d %d\r\n", key, item.Flag, len(item.Body))
-				if e := WriteFull(w, item.Body); e != nil {
-					return e
-				}
-				WriteFull(w, []byte("\r\n"))
+	for {
+		req, err := m.Read(rbuf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			} else {
+				resp := new(Response)
+				writeErrorMc(resp, err)
+				resp.Write(wbuf)
+				wbuf.Flush()
+				continue
 			}
 		}
-		io.WriteString(w, "END\r\n")
 
-	case "STAT":
-		io.WriteString(w, resp.msg)
-		io.WriteString(w, "END\r\n")
-
-	default:
-		io.WriteString(w, resp.status)
-		if resp.msg != "" {
-			io.WriteString(w, " "+resp.msg)
+		resp, quit := m.Process(req)
+		if quit {
+			break
 		}
-		io.WriteString(w, "\r\n")
+		if resp == nil {
+			continue
+		}
+		if !resp.noreply {
+			resp.Write(wbuf)
+			wbuf.Flush()
+			continue
+		}
 	}
-	return nil
+
+	// log.Printf("conn %s closing...", addr)
+	if err := conn.Close(); err != nil {
+		// log.Printf("conn %s close error: %s", addr, err)
+	}
+
+	return
 }
 
-func WriteFull(w io.Writer, buf []byte) error {
-	n, e := w.Write(buf)
-	for e != nil && n > 0 {
-		buf = buf[n:]
-		n, e = w.Write(buf)
+func (m *McEntry) ListenAndServe() error {
+	addr := Addrcat(m.host, m.port)
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
 	}
-	return e
+
+	stopListener, err := NewStopListener(l)
+	if err != nil {
+		return err
+	}
+	m.stopListener = stopListener
+
+	log.Printf("mc entrance serving at %s...", addr)
+	for {
+		conn, e := m.stopListener.Accept()
+		if e != nil {
+			// log.Printf("Accept failed: %s\n", e)
+			return e
+		}
+
+		go m.handlerConn(conn)
+	}
+
+	return nil
 }
 
 func (m *McEntry) Stop() {

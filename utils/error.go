@@ -62,17 +62,17 @@ func (e Error) Error() string {
 	return ItoaQuick(e.ErrorCode) + " " + e.Message + " (" + e.Cause + ")"
 }
 
-func (e Error) toJsonString() string {
-	b, _ := json.Marshal(e)
-	return string(b)
-}
-
 func (e Error) statusCode() int {
 	status, ok := errorStatus[e.ErrorCode]
 	if !ok {
 		status = http.StatusBadRequest
 	}
 	return status
+}
+
+func (e Error) toJsonString() string {
+	b, _ := json.Marshal(e)
+	return string(b)
 }
 
 func (e Error) WriteTo(w http.ResponseWriter) {

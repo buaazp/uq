@@ -32,6 +32,95 @@ func NewRedisEntry(host string, port int, messageQueue queue.MessageQueue) (*Red
 	return rs, nil
 }
 
+func (r *RedisEntry) OnUndefined(session *Session, cmd *Command) (reply *Reply) {
+	return ErrorReply(NewError(
+		ErrBadRequest,
+		"command not supported: "+cmd.String(),
+	))
+}
+
+func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Reply) {
+	cmdName := cmd.Name()
+
+	if cmdName == "ADD" || cmdName == "QADD" {
+		reply = r.OnQadd(cmd)
+	} else if cmdName == "SET" || cmdName == "QPUSH" {
+		reply = r.OnQpush(cmd)
+	} else if cmdName == "MSET" || cmdName == "QMPUSH" {
+		reply = r.OnQmpush(cmd)
+	} else if cmdName == "GET" || cmdName == "QPOP" {
+		reply = r.OnQpop(cmd)
+	} else if cmdName == "MGET" || cmdName == "QMPOP" {
+		reply = r.OnQmpop(cmd)
+	} else if cmdName == "DEL" || cmdName == "QDEL" {
+		reply = r.OnQdel(cmd)
+	} else if cmdName == "MDEL" || cmdName == "QMDEL" {
+		reply = r.OnQmdel(cmd)
+	} else if cmdName == "EMPTY" || cmdName == "QEMPTY" {
+		reply = r.OnQempty(cmd)
+	} else if cmdName == "INFO" || cmdName == "QINFO" {
+		reply = r.OnInfo(cmd)
+	} else {
+		reply = r.OnUndefined(session, cmd)
+	}
+
+	return
+}
+
+func (r *RedisEntry) Process(session *Session, cmd *Command) (reply *Reply) {
+	// invoke & time
+	begin := time.Now()
+	cmd.SetAttribute(C_SESSION, session)
+
+	// varify command
+	if err := verifyCommand(cmd); err != nil {
+		// log.Printf("[%s] bad command %s\n", session.RemoteAddr(), cmd)
+		return ErrorReply(NewError(
+			ErrBadRequest,
+			err.Error(),
+		))
+	}
+
+	// invoke
+	reply = r.commandHandler(session, cmd)
+
+	elapsed := time.Now().Sub(begin)
+	cmd.SetAttribute(C_ELAPSED, elapsed)
+
+	return
+}
+
+func (r *RedisEntry) handlerConn(session *Session) {
+	var err error
+	// addr := session.RemoteAddr().String()
+	// log.Printf("handleClient: %s", addr)
+
+	for {
+		var cmd *Command
+		cmd, err = session.ReadCommand()
+		// 1) io.EOF
+		// 2) read tcp 127.0.0.1:51863: connection reset by peer
+		if err != nil {
+			// log.Printf("session read command error: %s", err)
+			break
+		}
+		reply := r.Process(session, cmd)
+		if reply != nil {
+			err = session.WriteReply(reply)
+			if err != nil {
+				break
+			}
+		}
+	}
+
+	// log.Printf("session %s closing...", addr)
+	if err := session.Close(); err != nil {
+		// log.Printf("session %s close error: %s", addr, err)
+	}
+
+	return
+}
+
 func (r *RedisEntry) ListenAndServe() error {
 	addr := Addrcat(r.host, r.port)
 	l, err := net.Listen("tcp", addr)
@@ -49,100 +138,13 @@ func (r *RedisEntry) ListenAndServe() error {
 	for {
 		conn, err := r.stopListener.Accept()
 		if err != nil {
-			log.Printf("Accept failed: %s\n", err)
+			// log.Printf("Accept failed: %s\n", err)
 			return err
 		}
 		go r.handlerConn(NewSession(conn))
 	}
 
 	return nil
-}
-
-func (r *RedisEntry) handlerConn(session *Session) {
-	var err error
-	addr := session.RemoteAddr().String()
-	log.Printf("handleClient: %s", addr)
-
-	for {
-		var cmd *Command
-		cmd, err = session.ReadCommand()
-		// 1) io.EOF
-		// 2) read tcp 127.0.0.1:51863: connection reset by peer
-		if err != nil {
-			log.Printf("session read command error: %s", err)
-			break
-		}
-		reply := r.Process(session, cmd)
-		if reply != nil {
-			err = session.WriteReply(reply)
-			if err != nil {
-				break
-			}
-		}
-	}
-
-	log.Printf("session %s closing...", addr)
-	if err := session.Close(); err != nil {
-		log.Printf("session %s close error: %s", addr, err)
-	}
-
-	return
-}
-
-func (r *RedisEntry) Process(session *Session, cmd *Command) (reply *Reply) {
-	// invoke & time
-	begin := time.Now()
-	cmd.SetAttribute(C_SESSION, session)
-
-	// varify command
-	if err := verifyCommand(cmd); err != nil {
-		log.Printf("[%s] bad command %s\n", session.RemoteAddr(), cmd)
-		return ErrorReply(NewError(
-			ErrBadRequest,
-			err.Error(),
-		))
-	}
-
-	// invoke
-	reply = r.commandHandler(session, cmd)
-
-	elapsed := time.Now().Sub(begin)
-	cmd.SetAttribute(C_ELAPSED, elapsed)
-
-	return
-}
-
-func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Reply) {
-	cmdName := cmd.Name()
-
-	if cmdName == "QADD" {
-		reply = r.OnQadd(cmd)
-	} else if cmdName == "QPUSH" {
-		reply = r.OnQpush(cmd)
-	} else if cmdName == "QMPUSH" {
-		reply = r.OnQmpush(cmd)
-	} else if cmdName == "QPOP" {
-		reply = r.OnQpop(cmd)
-	} else if cmdName == "QMPOP" {
-		reply = r.OnQmpop(cmd)
-	} else if cmdName == "QDEL" {
-		reply = r.OnQdel(cmd)
-	} else if cmdName == "QMDEL" {
-		reply = r.OnQmdel(cmd)
-	} else if cmdName == "QEMPTY" {
-		reply = r.OnQempty(cmd)
-	} else {
-		reply = r.OnUndefined(session, cmd)
-	}
-
-	return
-}
-
-func (r *RedisEntry) OnUndefined(session *Session, cmd *Command) (reply *Reply) {
-	return ErrorReply(NewError(
-		ErrBadRequest,
-		"command not supported: "+cmd.String(),
-	))
 }
 
 func (r *RedisEntry) Stop() {

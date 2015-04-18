@@ -6,6 +6,16 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
+func TestItoaQuick(t *testing.T) {
+	Convey("Test ItoaQuick", t, func() {
+		i1, i2 := 100, 4869
+		str1 := ItoaQuick(i1)
+		So(str1, ShouldEqual, "100")
+		str2 := ItoaQuick(i2)
+		So(str2, ShouldEqual, "4869")
+	})
+}
+
 func TestAcatui(t *testing.T) {
 	Convey("Test Acatui", t, func() {
 		key := "foo/x"

@@ -86,16 +86,18 @@ func getTestSingle(ch chan bool, cn, n int) {
 	var mc *memcache.Client
 	conn := Addrcat(host, port)
 	key := topicName + "/" + lineName
+	keys := []string{key, "id"}
 	mc = memcache.New(conn)
 	for i := 0; i < n; i++ {
 		start := time.Now()
-		item, err := mc.Get(key)
+		items, err := mc.GetMulti(keys)
 		if err != nil {
 			log.Printf("get error: c%d %v", cn, err)
 		} else {
 			end := time.Now()
 			duration := end.Sub(start).Seconds()
-			log.Printf("get succ: %s spend: %.3fms", item.Key, duration*1000)
+			id := string(items["id"].Value)
+			log.Printf("get succ: %s spend: %.3fms", id, duration*1000)
 		}
 	}
 	ch <- true

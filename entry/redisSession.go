@@ -8,6 +8,8 @@ import (
 	"io"
 	"net"
 	"strconv"
+
+	. "github.com/buaazp/uq/utils"
 )
 
 type Session struct {
@@ -46,7 +48,7 @@ func (s *Session) WriteReply(reply *Reply) (err error) {
 	case ReplyTypeMultiBulks:
 		err = s.replyMultiBulks(reply.Value.([]interface{}))
 	default:
-		err = errors.New("Illegal ReplyType: " + itoa(int(reply.Type)))
+		err = errors.New("Illegal ReplyType: " + ItoaQuick(int(reply.Type)))
 	}
 	return
 }
@@ -210,7 +212,7 @@ func (s *Session) replyError(errmsg string) (err error) {
 func (s *Session) replyInteger(i int) (err error) {
 	buf := bytes.Buffer{}
 	buf.WriteString(":")
-	buf.WriteString(itoa(i))
+	buf.WriteString(ItoaQuick(i))
 	buf.WriteString(CRLF)
 	_, err = buf.WriteTo(s)
 	return
@@ -221,7 +223,6 @@ func (s *Session) replyBulk(bulk interface{}) (err error) {
 	// NULL Bulk Reply
 	isnil := bulk == nil
 	if !isnil {
-		// []byte 需要类型转换后才能判断
 		b, ok := bulk.([]byte)
 		isnil = ok && b == nil
 	}
@@ -234,12 +235,12 @@ func (s *Session) replyBulk(bulk interface{}) (err error) {
 	switch bulk.(type) {
 	case []byte:
 		b := bulk.([]byte)
-		buf.WriteString(itoa(len(b)))
+		buf.WriteString(ItoaQuick(len(b)))
 		buf.WriteString(CRLF)
 		buf.Write(b)
 	default:
 		b := []byte(bulk.(string))
-		buf.WriteString(itoa(len(b)))
+		buf.WriteString(ItoaQuick(len(b)))
 		buf.WriteString(CRLF)
 		buf.Write(b)
 	}
@@ -263,7 +264,7 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 	}
 	buf := bytes.Buffer{}
 	buf.WriteString("*")
-	buf.WriteString(itoa(bulkCount))
+	buf.WriteString(ItoaQuick(bulkCount))
 	buf.WriteString(CRLF)
 	for i := 0; i < bulkCount; i++ {
 		bulk := bulks[i]
@@ -271,7 +272,7 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 		case string:
 			buf.WriteString("$")
 			b := []byte(bulk.(string))
-			buf.WriteString(itoa(len(b)))
+			buf.WriteString(ItoaQuick(len(b)))
 			buf.WriteString(CRLF)
 			buf.Write(b)
 			buf.WriteString(CRLF)
@@ -282,14 +283,14 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 				buf.WriteString(CRLF)
 			} else {
 				buf.WriteString("$")
-				buf.WriteString(itoa(len(b)))
+				buf.WriteString(ItoaQuick(len(b)))
 				buf.WriteString(CRLF)
 				buf.Write(b)
 				buf.WriteString(CRLF)
 			}
 		case int:
 			buf.WriteString(":")
-			buf.WriteString(itoa(bulk.(int)))
+			buf.WriteString(ItoaQuick(bulk.(int)))
 			buf.WriteString(CRLF)
 		case uint64:
 			buf.WriteString(":")

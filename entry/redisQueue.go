@@ -1,8 +1,6 @@
 package entry
 
 import (
-	"log"
-
 	. "github.com/buaazp/uq/utils"
 )
 
@@ -10,7 +8,7 @@ func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
 	key := cmd.StringAtIndex(1)
 	recycle := cmd.StringAtIndex(2)
 
-	log.Printf("creating... %s %s", key, recycle)
+	// log.Printf("creating... %s %s", key, recycle)
 	err := r.messageQueue.Create(key, recycle)
 	if err != nil {
 		return ErrorReply(err)
@@ -96,7 +94,7 @@ func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
 
 	err := r.messageQueue.Confirm(key)
 	if err != nil {
-		log.Printf("confirm error: %s", err)
+		// log.Printf("confirm error: %s", err)
 		return ErrorReply(err)
 	}
 
@@ -105,7 +103,7 @@ func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
 
 func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
 	keys := cmd.StringArgs()[1:]
-	log.Printf("keys: %v", keys)
+	// log.Printf("keys: %v", keys)
 
 	errs := r.messageQueue.MultiConfirm(keys)
 
@@ -129,4 +127,32 @@ func (r *RedisEntry) OnQempty(cmd *Command) *Reply {
 		return ErrorReply(err)
 	}
 	return StatusReply("OK")
+}
+
+func (r *RedisEntry) OnInfo(cmd *Command) *Reply {
+	key := cmd.StringAtIndex(1)
+
+	qs, err := r.messageQueue.Stat(key)
+	if err != nil {
+		return ErrorReply(err)
+	}
+
+	// for human reading
+	strs := qs.ToRedisStrings()
+	vals := make([]interface{}, len(strs))
+	for i, str := range strs {
+		vals[i] = str
+	}
+	return MultiBulksReply(vals)
+
+	// for json format
+	// data, err := qs.ToJson()
+	// if err != nil {
+	// 	return ErrorReply(NewError(
+	// 		ErrInternalError,
+	// 		err.Error(),
+	// 	))
+	// }
+
+	// return StatusReply(string(data))
 }
