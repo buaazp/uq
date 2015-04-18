@@ -40,14 +40,14 @@ func initQueue() error {
 	}
 	defer conn.Close()
 
-	_, err = conn.Do("QADD", topicName)
+	_, err = conn.Do("ADD", topicName)
 	if err != nil {
 		log.Printf("add error: %v", err)
 		return err
 	}
 
 	fullLineName := topicName + "/" + lineName
-	_, err = conn.Do("QADD", fullLineName)
+	_, err = conn.Do("ADD", fullLineName)
 	if err != nil {
 		log.Printf("add error: %v", err)
 		return err
@@ -67,7 +67,7 @@ func setTestSingle(ch chan bool, cn, n int) error {
 	v := make([]byte, dataSize)
 	for i := 0; i < n; i++ {
 		start := time.Now()
-		_, err = conn.Do("QPUSH", topicName, v)
+		_, err = conn.Do("SET", topicName, v)
 		if err != nil {
 			log.Printf("set error: c%d %v", cn, err)
 		} else {
@@ -112,7 +112,7 @@ func msetTestSingle(ch chan bool, cn, n int) error {
 	count := n / bucket
 	for i := 0; i < count; i++ {
 		start := time.Now()
-		_, err = conn.Do("QMPUSH", b...)
+		_, err = conn.Do("MSET", b...)
 		if err != nil {
 			log.Printf("set error: c%d %v", cn, err)
 		} else {
@@ -150,11 +150,11 @@ func getTestSingle(ch chan bool, cn, n int) error {
 	key := topicName + "/" + lineName
 	for i := 0; i < n; i++ {
 		start := time.Now()
-		reply, err := conn.Do("QPOP", key)
+		reply, err := conn.Do("GET", key)
 		if err != nil {
 			log.Printf("get error: c%d %v", cn, err)
 		} else {
-			rpl, err := redis.Values(reply, err)
+			rpl, err := redis.Strings(reply, err)
 			if err != nil {
 				fmt.Printf("redis.values error: c%d %v\n", cn, err)
 				return err
@@ -162,11 +162,7 @@ func getTestSingle(ch chan bool, cn, n int) error {
 			// fmt.Printf("redis.strings %v\n", v)
 			end := time.Now()
 			duration := end.Sub(start).Seconds()
-			id, err := redis.String(rpl[1], err)
-			if err != nil {
-				fmt.Printf("redis.string error: c%d %v\n", cn, err)
-				return err
-			}
+			id := rpl[1]
 			log.Printf("get succ: %s spend: %.3fms", id, duration*1000)
 		}
 	}
