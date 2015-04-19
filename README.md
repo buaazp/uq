@@ -2,14 +2,14 @@
 
 Uq is another distributed message queue. It is written in Go and has many useful features including:
 
-- [support multi client APIs](#client-api)
+- [multi client APIs support](#client-api)
 - [consume messages from multi lines of one topic](#topic-and-line)
-- [message confirm and recycle](#message-confirm-and-recycle)
+- [message confirmation and recycle](#message-confirmation-and-recycle)
 - [distributed cluster](#distributed-cluster)
 - [RESTful admin methods](#admin-api)
 - [multi ways of message persistence](#message-persistence)
 
-Messages in uq is very safe. It is existed until a consumer confirmed clearly. Consumer lines of a topic are independent. So one independent workflow can use a line to consume the messages in topic. A group of uq can make up a cluster. The cluster info is stored in [etcd](https://github.com/coreos/etcd). Clients can get the information from etcd and then connect to one or some uq servers in the cluster. Or you can use [libuq](https://github.com/buaazp/libuq) to communicate with uq cluster.
+Messages in uq is very safe. It exists until a consumer confirms clearly. Consumer lines of a topic are independent. So one independent workflow can use a line to consume the messages in topic. A group of uq can make up a cluster. Cluster information is stored in [etcd](https://github.com/coreos/etcd). Clients can get the information from etcd and then connect to one or some uq servers in the cluster. Or you can use [libuq](https://github.com/buaazp/libuq) to communicate with uq cluster.
 
 Author: [@招牌疯子](http://weibo.com/819880808)  
 Contact me: zp@buaa.us
@@ -40,18 +40,18 @@ Usage of ./uq:
 
 #### topic and line
 
-A topic is a class to store messages. Producters push messages into a topic. A line is a class to output messages for a clear purpose. A topic can have many lines for different purposes. For example:
+A topic is a class to store messages. Producers push messages into a topic. A line is a class to output messages for a clear purpose. A topic can have many lines for different purposes. For example:
 
 1. Users upload pictures to [weibo.com](http://weibo.com). All the upload messages pushed into a topic named `wb_img_upload`.
-2. Compress service pops the message from a line named `img_to_compress`, then compresses the picture and comfirms the message in this line.
-3. While analysis service pops the message from a line named `img_to_analysis`, then analyzes the picture and comfirm the message in this line.
+2. Compress service pops the message from a line named `img_to_compress`, then compresses the picture and confirms the message in this line.
+3. Analysis service pops the message from a line named `img_to_analysis`, then analyzes the picture and confirm the message in this line.
 4. Any other services can pop and confirm messages from its own line. The status of different lines are independent.
 
-#### message confirm and recycle
+#### message confirmation and recycle
 
-Messages poped from a line should be confirmed after disposing. If a consumer poped a message but failed to dispose it. This message will be pushed back into the line after a recycle time which is set when the line creating.
+Messages popped from a line should be confirmed after disposing. If a consumer pops a message but fails to dispose it, this message will be pushed back into the line after a recycle time which is set when creating the line.
 
-If a line is created with no recyle time. The line will degrade to a classical message queue, which means if a message is poped, it is lost.
+If a line is created with no recycle time. The line will degrade to a classical message queue, which means if a message is popped, it is lost.
 
 #### queue methods
 
@@ -78,11 +78,11 @@ And uq has some admin methods to manage the queue:
 
 ### Client API
 
-Uq supported many client APIs like memcached, redis and http RESTful api. Choose the protocol you are most familiar.
+Uq supports many client APIs like memcached, redis and http RESTful api. Choose the protocol you are most familiar with.
 
 #### memcached api
 
-Uq is designed to be an alternative to [memcacheQ](http://memcachedb.org/memcacheq/). And the author of mcq [@stvchu](http://stvchu.github.io/) provides so many advises for designing uq. Thanks a lot to him for his help.
+Uq is designed to be an alternative to [memcacheQ](http://memcachedb.org/memcacheq/). And the author of mcq [@stvchu](http://stvchu.github.io/) provides a lot of advice for designing uq. Thank him a lot for his help.
 
 Start uq with mc protocol and connect uq with telnet:
 
@@ -125,7 +125,7 @@ DELETED
 
 #### redis api
 
-Uq also supported redis protocol. And using redis protocol is easier than memcached. Start uq with redis protocol and using redis-cli to connect:
+Uq also supports redis protocol. And using redis protocol is easier than memcached. Start uq with redis protocol and use redis-cli to connect:
 
 ```
 uq -protocol redis
@@ -207,7 +207,7 @@ Date: Sat, 18 Apr 2015 09:19:08 GMT
 
 #### admin api
 
-An admin http server starts when uq started. It uses another port (default is 8809) to listen http requests.
+An admin http server starts when uq is started. It uses another port (default is 8809) to listen for http requests.
 
 ```
 // get stat of a line
@@ -298,7 +298,7 @@ The compatibility of different protocols can be found below:
 
 ### Distributed Cluster
 
-Uq cluster is based on etcd. You need to install and start etcd first. Then set etcd servers’ url when start uq instances.
+Uq cluster is based on etcd. You need to install and start etcd first. Then set etcd servers’ url when starting uq instances.
 
 ```
 // start instance 1
@@ -309,22 +309,25 @@ uq -port 8808 -admin-port 8809 -dir ./uq2 -etcd http://localhost:4001 -cluster u
 uq -port 8908 -admin-port 8909 -dir ./uq3 -etcd http://localhost:4001 -cluster uq
 ```
 
-Then these uq instances make up a uq cluster. All instances in a cluster have same topics and lines. But the message in them is independent. In other words, a message can only push into one instance in a cluster. Queue workflow in uq cluster is like below:
+Then these uq instances make up a uq cluster. All instances in a cluster have same topics and lines. But the message in them is independent. In other words, a message can be only pushed into one instance in a cluster. Queue workflow in uq cluster is like below:
 
-1. Client A add topic [foo] in instance 1. All instances has topic named [foo].
-2. Client B add line [foo/x] in instance 2. All instances has line [foo/x].
-3. Client C push a message [bar] to instacne 3. C can pop this message from instance 3.
+1. Client A adds topic [foo] in instance 1. All instances has topic named [foo].
+2. Client B adds line [foo/x] in instance 2. All instances has line [foo/x].
+3. Client C pushes a message [bar] to instacne 3. C can pop this message from instance 3.
 4. A and B cannot pop any message from instance 1/2 because they have no message.
-5. A, B, C continually push messages to topic [foo] in the instace they connected to.
+5. A, B, C continually push messages to topic [foo] in the instace they connect to.
 6. Consumer D can pop [foo/x] to get a message from any instance in the cluster. All the messages in different instances are belong to line [foo/x].
-7. Consumer can only confirm a message in the instance which poped the message.
+7. Consumer can only confirm a message in the instance which popped the message.
 
+#### using libuq
+
+Maybe you are in trouble with using the api of etcd and consideration of the connection pool. You can use [libuq](https://github.com/buaazp/libuq) to write simple codes. Libuq is designed for uq cluster. Now only Golang is supported. You can find more information about libuq in its github repository.
 
 ### Message Persistence
 
-The default storage of uq is goleveldb. It stores all the data in disk. So the messages are persistent. If the uq server broken down, the queue will recover after uq restart.
+The default storage of uq is goleveldb. It stores all the data in disk. So the messages are persistent. If the uq server broken down, the queue will recover after uq restarts.
 
-If you need a more fast uq, you can use memory to store the messages. But if uq shutdown, the messages will lose.
+If you need a faster uq, you can use memory to store the messages. But if uq is shut down, the messages will be lost.
 
 Other storage like rocksdb, leveldb will be supported in the future.
 
@@ -342,7 +345,7 @@ goconvey
 
 ### Benchmark Test
 
-This benchmark test is between uq and memcacheQ v0.2.0 in my 13’ Macbook Pro early 2011 with SSD. Uq is started with:
+This benchmark test is between uq and memcacheQ v0.2.0 in my 13" Macbook Pro early 2011 with SSD. Uq is started with:
 
 ```
 ./uq -protocol mc
@@ -361,19 +364,19 @@ go build mc_bench.go
 ./mc_bench -c 10 -n 500000 -m push
 ```
 
-The result of benchmark test is:
+The result of benchmark test:
 
 |  Program  |       QPS      | Throughput |
 | :-------- |:--------------:| ----------:|
 | memcacheQ | 4169.952 msg/s | 0.795 MB/s |
 | UQ        | 3471.060 msg/s | 0.662 MB/s |
 
-Uq is about 17% slower than memcachedQ now. It may because goleveldb spend much time for snappy compression. Uq's data size is 250MB while memcachedQ generated 4.5GB data after this test. You can use NoCompression option for goleveldb if you want.
+Uq is about 17% slower than memcachedQ now. It may be because goleveldb spends much time for snappy compression. Uq's data size is 250MB while memcachedQ generated 4.5GB data after this test. You can use NoCompression option for goleveldb if you want.
 
-Any way, we need more optimization measures to improve performance of uq.
+Anyway, we need more optimization measures to improve performance of uq.
 
 ### Feedback:
 
 If you have any question, please submit comment in my [BLOG](http://blog.buaa.us/) or mention me on [Weibo](http://weibo.com/819880808), [twitter](https://twitter.com/buaazp).
-Technical issues are also welcomed to be submitted on [GitHub Issues](https://github.com/buaazp/uq/issues).
+Technical issues are also welcome to be submitted on [GitHub Issues](https://github.com/buaazp/uq/issues).
 
