@@ -305,7 +305,7 @@ func (m *McEntry) handlerConn(conn net.Conn) {
 	for {
 		req, err := m.Read(rbuf)
 		if err != nil {
-			if err == io.EOF {
+			if strings.Contains(err.Error(), "EOF") {
 				break
 			} else {
 				resp := new(Response)

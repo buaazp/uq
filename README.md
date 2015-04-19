@@ -369,9 +369,9 @@ The result of benchmark test:
 |  Program  |       QPS      | Throughput |
 | :-------- |:--------------:| ----------:|
 | memcacheQ | 4169.952 msg/s | 0.795 MB/s |
-| UQ        | 3471.060 msg/s | 0.662 MB/s |
+| UQ        | 4319.417 msg/s | 0.824 MB/s |
 
-Uq is about 17% slower than memcachedQ now. It may be because goleveldb spends much time for snappy compression. Uq's data size is 250MB while memcachedQ generated 4.5GB data after this test. You can use NoCompression option for goleveldb if you want.
+Uq performs as well as memcachedQ now. With the snappy compression of goleveldb, uq's data size is only 12MB while memcachedQ generated 4.5GB data after this test. You can use NoCompression option for goleveldb if you want.
 
 Anyway, we need more optimization measures to improve performance of uq.
 
