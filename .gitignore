@@ -7,6 +7,7 @@ uq
 test/bench_reader
 test/bench_writer
 test/mc_bench
+test/mc_bench_sc
 test/redis_bench
 test/testAcati
 *.log

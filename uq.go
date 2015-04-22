@@ -76,6 +76,12 @@ func main() {
 		fmt.Printf("byebye! uq see u later! 😄\n")
 	}()
 
+	flag.Parse()
+
+	if !checkArgs() {
+		return
+	}
+
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		fmt.Printf("mkdir %s error: %s\n", dir, err)
@@ -93,11 +99,6 @@ func main() {
 	log.SetPrefix("[uq] ")
 	log.SetOutput(logf)
 
-	flag.Parse()
-
-	if !checkArgs() {
-		return
-	}
 	fmt.Printf("uq started! 😄\n")
 
 	var storage store.Storage
