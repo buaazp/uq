@@ -16,11 +16,11 @@ const (
 )
 
 type HttpEntry struct {
-	host     string
-	port     int
-	adminMux map[string]func(http.ResponseWriter, *http.Request, string)
-	server   *http.Server
-	// stopListener *StopListener
+	host         string
+	port         int
+	adminMux     map[string]func(http.ResponseWriter, *http.Request, string)
+	server       *http.Server
+	stopListener *StopListener
 	messageQueue queue.MessageQueue
 }
 
@@ -178,15 +178,13 @@ func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key st
 		return
 	}
 
-	log.Printf("qs start!")
 	qs, err := h.messageQueue.Stat(key)
 	if err != nil {
-		log.Printf("qs error: %v", err)
 		writeErrorHttp(w, err)
 		return
 	}
 
-	log.Printf("qs succ: %v", qs)
+	log.Printf("qs: %v", qs)
 	data, err := qs.ToJson()
 	if err != nil {
 		writeErrorHttp(w, NewError(
@@ -236,17 +234,17 @@ func (h *HttpEntry) ListenAndServe() error {
 		return err
 	}
 
-	// stopListener, err := NewStopListener(l)
-	// if err != nil {
-	// 	return err
-	// }
-	// h.stopListener = stopListener
+	stopListener, err := NewStopListener(l)
+	if err != nil {
+		return err
+	}
+	h.stopListener = stopListener
 
 	log.Printf("admin server serving at %s...", addr)
-	return h.server.Serve(l)
+	return h.server.Serve(h.stopListener)
 }
 
 func (h *HttpEntry) Stop() {
 	log.Printf("admin server stoping...")
-	// h.stopListener.Stop()
+	h.stopListener.Stop()
 }

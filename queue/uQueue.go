@@ -720,4 +720,5 @@ func (u *UnitedQueue) Close() {
 	}
 
 	u.storage.Close()
+	log.Printf("uq stoped.")
 }
