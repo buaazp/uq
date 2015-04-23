@@ -42,7 +42,7 @@ func init() {
 	flag.IntVar(&adminPort, "admin-port", 8809, "admin listen port")
 	flag.IntVar(&pprofPort, "pprof-port", 8080, "pprof listen port")
 	flag.StringVar(&protocol, "protocol", "redis", "frontend interface type [redis/mc/http]")
-	flag.StringVar(&db, "db", "goleveldb", "backend storage type [goleveldb/memdb]")
+	flag.StringVar(&db, "db", "rocksdb", "backend storage type [rocksdb/goleveldb/memdb]")
 	flag.StringVar(&dir, "dir", "./data", "backend storage path")
 	flag.StringVar(&logFile, "log", "", "uq log path")
 	flag.StringVar(&etcd, "etcd", "", "etcd service location")
@@ -59,7 +59,7 @@ func belong(single string, team []string) bool {
 }
 
 func checkArgs() bool {
-	if !belong(db, []string{"goleveldb", "memdb"}) {
+	if !belong(db, []string{"rocksdb", "goleveldb", "memdb"}) {
 		fmt.Printf("db mode %s is not supported!\n", db)
 		return false
 	}
@@ -102,7 +102,11 @@ func main() {
 	fmt.Printf("uq started! 😄\n")
 
 	var storage store.Storage
-	if db == "goleveldb" {
+	if db == "rocksdb" {
+		dbpath := path.Clean(path.Join(dir, "uq.db"))
+		log.Printf("dbpath: %s", dbpath)
+		storage, err = store.NewRockStore(dbpath)
+	} else if db == "goleveldb" {
 		dbpath := path.Clean(path.Join(dir, "uq.db"))
 		log.Printf("dbpath: %s", dbpath)
 		storage, err = store.NewLevelStore(dbpath)
