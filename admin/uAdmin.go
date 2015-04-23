@@ -16,11 +16,11 @@ const (
 )
 
 type HttpEntry struct {
-	host         string
-	port         int
-	adminMux     map[string]func(http.ResponseWriter, *http.Request, string)
-	server       *http.Server
-	stopListener *StopListener
+	host     string
+	port     int
+	adminMux map[string]func(http.ResponseWriter, *http.Request, string)
+	server   *http.Server
+	// stopListener *StopListener
 	messageQueue queue.MessageQueue
 }
 
@@ -236,17 +236,17 @@ func (h *HttpEntry) ListenAndServe() error {
 		return err
 	}
 
-	stopListener, err := NewStopListener(l)
-	if err != nil {
-		return err
-	}
-	h.stopListener = stopListener
+	// stopListener, err := NewStopListener(l)
+	// if err != nil {
+	// 	return err
+	// }
+	// h.stopListener = stopListener
 
 	log.Printf("admin server serving at %s...", addr)
-	return h.server.Serve(h.stopListener)
+	return h.server.Serve(l)
 }
 
 func (h *HttpEntry) Stop() {
 	log.Printf("admin server stoping...")
-	h.stopListener.Stop()
+	// h.stopListener.Stop()
 }
