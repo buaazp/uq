@@ -19,6 +19,9 @@ func NewMemStore() (*MemStore, error) {
 }
 
 func (m *MemStore) Get(key string) ([]byte, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
 	data, ok := m.db[key]
 	if !ok {
 		return nil, errors.New(ErrNotExisted)
@@ -35,6 +38,9 @@ func (m *MemStore) Set(key string, data []byte) error {
 }
 
 func (m *MemStore) Del(key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	_, ok := m.db[key]
 	if !ok {
 		return errors.New(ErrNotExisted)
@@ -45,5 +51,10 @@ func (m *MemStore) Del(key string) error {
 }
 
 func (m *MemStore) Close() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.db = nil
+
 	return nil
 }

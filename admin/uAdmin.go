@@ -178,13 +178,15 @@ func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key st
 		return
 	}
 
+	log.Printf("qs start!")
 	qs, err := h.messageQueue.Stat(key)
 	if err != nil {
+		log.Printf("qs error: %v", err)
 		writeErrorHttp(w, err)
 		return
 	}
 
-	log.Printf("qs: %v", qs)
+	log.Printf("qs succ: %v", qs)
 	data, err := qs.ToJson()
 	if err != nil {
 		writeErrorHttp(w, NewError(
