@@ -13,9 +13,10 @@ import (
 )
 
 type McEntry struct {
-	host         string
-	port         int
-	stopListener *StopListener
+	host string
+	port int
+	// stopListener *StopListener
+	listener     net.Listener
 	messageQueue queue.MessageQueue
 }
 
@@ -345,15 +346,17 @@ func (m *McEntry) ListenAndServe() error {
 		return err
 	}
 
-	stopListener, err := NewStopListener(l)
-	if err != nil {
-		return err
-	}
-	m.stopListener = stopListener
+	// stopListener, err := NewStopListener(l)
+	// if err != nil {
+	// 	return err
+	// }
+	// m.stopListener = stopListener
+	m.listener = l
 
 	log.Printf("mc entrance serving at %s...", addr)
 	for {
-		conn, e := m.stopListener.Accept()
+		// conn, e := m.stopListener.Accept()
+		conn, e := m.listener.Accept()
 		if e != nil {
 			// log.Printf("Accept failed: %s\n", e)
 			return e
@@ -367,6 +370,7 @@ func (m *McEntry) ListenAndServe() error {
 
 func (m *McEntry) Stop() {
 	log.Printf("mc entry stoping...")
-	m.stopListener.Stop()
+	// m.stopListener.Stop()
+	m.listener.Close()
 	m.messageQueue.Close()
 }
