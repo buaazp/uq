@@ -2,16 +2,14 @@ package store
 
 import (
 	"log"
-	"time"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
 )
 
 type LevelStore struct {
-	path    string
-	db      *leveldb.DB
-	timeout time.Duration
+	path string
+	db   *leveldb.DB
 }
 
 func NewLevelStore(path string) (*LevelStore, error) {
