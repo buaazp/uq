@@ -120,6 +120,11 @@ func main() {
 	var etcdServers []string
 	if etcd != "" {
 		etcdServers = strings.Split(etcd, ",")
+		for i, etcdServer := range etcdServers {
+			if !strings.HasPrefix(etcdServer, "http://") {
+				etcdServers[i] = "http://" + etcdServer
+			}
+		}
 	}
 	var messageQueue queue.MessageQueue
 	messageQueue, err = queue.NewUnitedQueue(storage, ip, port, etcdServers, cluster)
