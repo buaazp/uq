@@ -42,7 +42,7 @@ func init() {
 	flag.IntVar(&adminPort, "admin-port", 8809, "admin listen port")
 	flag.IntVar(&pprofPort, "pprof-port", 8080, "pprof listen port")
 	flag.StringVar(&protocol, "protocol", "redis", "frontend interface type [redis/mc/http]")
-	flag.StringVar(&db, "db", "rocksdb", "backend storage type [rocksdb/goleveldb/memdb]")
+	flag.StringVar(&db, "db", "goleveldb", "backend storage type [rocksdb/goleveldb/memdb]")
 	flag.StringVar(&dir, "dir", "./data", "backend storage path")
 	flag.StringVar(&logFile, "log", "", "uq log path")
 	flag.StringVar(&etcd, "etcd", "", "etcd service location")
