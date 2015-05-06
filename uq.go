@@ -102,6 +102,11 @@ func main() {
 	fmt.Printf("uq started! 😄\n")
 
 	var storage store.Storage
+	// if db == "rocksdb" {
+	// 	dbpath := path.Clean(path.Join(dir, "uq.db"))
+	// 	log.Printf("dbpath: %s", dbpath)
+	// 	storage, err = store.NewRockStore(dbpath)
+	// } else if db == "goleveldb" {
 	if db == "goleveldb" {
 		dbpath := path.Clean(path.Join(dir, "uq.db"))
 		log.Printf("dbpath: %s", dbpath)
@@ -127,6 +132,12 @@ func main() {
 		}
 	}
 	var messageQueue queue.MessageQueue
+	// messageQueue, err = queue.NewFakeQueue(storage, ip, port, etcdServers, cluster)
+	// if err != nil {
+	// 	fmt.Printf("queue init error: %s\n", err)
+	// 	storage.Close()
+	// 	return
+	// }
 	messageQueue, err = queue.NewUnitedQueue(storage, ip, port, etcdServers, cluster)
 	if err != nil {
 		fmt.Printf("queue init error: %s\n", err)
@@ -201,7 +212,9 @@ func main() {
 	case <-stop:
 		// log.Printf("got signal: %v", signal)
 		adminServer.Stop()
+		log.Printf("admin server stoped.")
 		entrance.Stop()
+		log.Printf("entrance stoped.")
 	case <-entryFailed:
 		messageQueue.Close()
 	case <-adminFailed:

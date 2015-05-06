@@ -369,4 +369,5 @@ func (m *McEntry) Stop() {
 	log.Printf("mc entry stoping...")
 	m.stopListener.Stop()
 	m.messageQueue.Close()
+	log.Printf("mc entry stoped.")
 }

@@ -184,7 +184,7 @@ func (h *HttpEntry) statHandler(w http.ResponseWriter, req *http.Request, key st
 		return
 	}
 
-	log.Printf("qs: %v", qs)
+	// log.Printf("qs: %v", qs)
 	data, err := qs.ToJson()
 	if err != nil {
 		writeErrorHttp(w, NewError(

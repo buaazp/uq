@@ -471,16 +471,16 @@ func (t *topic) stat() *QueueStat {
 	qs.Name = t.name
 	qs.Type = "topic"
 
-	t.linesLock.RLock()
-	defer t.linesLock.RUnlock()
 	t.headLock.RLock()
-	defer t.headLock.RUnlock()
-	t.tailLock.RLock()
-	defer t.tailLock.RUnlock()
 	qs.Head = t.head
+	t.headLock.RUnlock()
+	t.tailLock.RLock()
 	qs.Tail = t.tail
+	t.tailLock.RUnlock()
 	qs.Count = qs.Tail - qs.Head
 
+	t.linesLock.RLock()
+	defer t.linesLock.RUnlock()
 	qs.Lines = make([]*QueueStat, 0)
 	for _, l := range t.lines {
 		ls := l.stat()
