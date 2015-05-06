@@ -1,5 +1,7 @@
 package store
 
+// to avoid cgo build, hide rocksdb now.
+/*
 import (
 	"github.com/DanielMorsing/rocksdb"
 )
@@ -49,3 +51,5 @@ func (r *RockStore) Close() error {
 	r.db.Close()
 	return nil
 }
+
+*/
