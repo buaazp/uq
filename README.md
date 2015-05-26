@@ -1,6 +1,6 @@
-## United Queue
+## UQ
 
-Uq is another distributed message queue. It is written in Go and has many useful features including:
+Uq (also named `United Queue`, `Unique`) is another distributed message queue. It is written in Go and has many useful features including:
 
 - [multi client APIs support](#client-api)
 - [consume messages from multi lines of one topic](#topic-and-line)
