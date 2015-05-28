@@ -361,8 +361,6 @@ func (m *McEntry) ListenAndServe() error {
 
 		go m.handlerConn(conn)
 	}
-
-	return nil
 }
 
 func (m *McEntry) Stop() {

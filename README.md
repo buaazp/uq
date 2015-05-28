@@ -1,5 +1,7 @@
 ## UQ
 
+[![Build Status](https://travis-ci.org/buaazp/uq.svg)](https://travis-ci.org/buaazp/uq) [![Coverage Status](https://coveralls.io/repos/buaazp/uq/badge.svg)](https://coveralls.io/r/buaazp/uq)
+
 Uq (also named `United Queue`, `Unique`) is another distributed message queue. It is written in Go and has many useful features including:
 
 - [multi client APIs support](#client-api)

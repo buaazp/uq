@@ -12,4 +12,5 @@ test/redis_bench
 test/testAcati
 *.log
 *.out
+*.swp
 

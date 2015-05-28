@@ -598,31 +598,31 @@ func (t *topic) remove() error {
 
 	err := t.removeLines()
 	if err != nil {
-		log.Printf("topic[%s] removeLines error: %s", err)
+		log.Printf("topic[%s] removeLines error: %s", t.name, err)
 	}
 
 	t.headLock.Lock()
 	defer t.headLock.Unlock()
 	err = t.removeHeadData()
 	if err != nil {
-		log.Printf("topic[%s] removeHeadData error: %s", err)
+		log.Printf("topic[%s] removeHeadData error: %s", t.name, err)
 	}
 
 	t.tailLock.Lock()
 	defer t.tailLock.Unlock()
 	err = t.removeTailData()
 	if err != nil {
-		log.Printf("topic[%s] removeTailData error: %s", err)
+		log.Printf("topic[%s] removeTailData error: %s", t.name, err)
 	}
 
 	err = t.removeTopicData()
 	if err != nil {
-		log.Printf("topic[%s] removeTopicData error: %s", err)
+		log.Printf("topic[%s] removeTopicData error: %s", t.name, err)
 	}
 
 	err = t.removeMsgData()
 	if err != nil {
-		log.Printf("topic[%s] removeMsgData error: %s", err)
+		log.Printf("topic[%s] removeMsgData error: %s", t.name, err)
 	}
 
 	log.Printf("topic[%s] remove succ", t.name)

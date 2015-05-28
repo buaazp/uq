@@ -143,8 +143,6 @@ func (r *RedisEntry) ListenAndServe() error {
 		}
 		go r.handlerConn(NewSession(conn))
 	}
-
-	return nil
 }
 
 func (r *RedisEntry) Stop() {

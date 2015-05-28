@@ -333,12 +333,12 @@ func (l *line) empty() error {
 func (l *line) remove() error {
 	err := l.removeLineData()
 	if err != nil {
-		log.Printf("line[%s] removeLineData error: %s", err)
+		log.Printf("line[%s] removeLineData error: %s", l.name, err)
 	}
 
 	err = l.removeRecycleData()
 	if err != nil {
-		log.Printf("line[%s] removeRecycleData error: %s", err)
+		log.Printf("line[%s] removeRecycleData error: %s", l.name, err)
 	}
 
 	log.Printf("line[%s] remove succ", l.name)
