@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path"
@@ -18,7 +16,6 @@ import (
 	"github.com/buaazp/uq/entry"
 	"github.com/buaazp/uq/queue"
 	"github.com/buaazp/uq/store"
-	. "github.com/buaazp/uq/utils"
 )
 
 var (
@@ -26,7 +23,6 @@ var (
 	host      string
 	port      int
 	adminPort int
-	pprofPort int
 	protocol  string
 	db        string
 	dir       string
@@ -40,7 +36,6 @@ func init() {
 	flag.StringVar(&host, "host", "0.0.0.0", "listen ip")
 	flag.IntVar(&port, "port", 8808, "listen port")
 	flag.IntVar(&adminPort, "admin-port", 8809, "admin listen port")
-	flag.IntVar(&pprofPort, "pprof-port", 8080, "pprof listen port")
 	flag.StringVar(&protocol, "protocol", "redis", "frontend interface type [redis/mc/http]")
 	flag.StringVar(&db, "db", "goleveldb", "backend storage type [goleveldb/memdb]")
 	flag.StringVar(&dir, "dir", "./data", "backend storage path")
@@ -201,12 +196,6 @@ func main() {
 			close(c)
 		}
 	}(adminFailed)
-
-	// start pprof server
-	go func() {
-		addr := Addrcat(host, pprofPort)
-		log.Println(http.ListenAndServe(addr, nil))
-	}()
 
 	select {
 	case <-stop:

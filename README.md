@@ -32,7 +32,6 @@ Usage of ./uq:
   -ip=“127.0.0.1”: self ip/host address
   -log=“”: uq log path
   -port=8808: listen port
-  -pprof-port=8080: pprof listen port
   -protocol=“redis”: frontend interface type [redis/mc/http]
 ```
 

@@ -15,7 +15,7 @@ import (
 var (
 	storage      store.Storage
 	messageQueue queue.MessageQueue
-	entrance     AdminServer
+	adminServer  AdminServer
 	client       *http.Client
 )
 
@@ -33,12 +33,12 @@ func TestNewAdmin(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(messageQueue, ShouldNotBeNil)
 
-		entrance, err = NewAdminServer("0.0.0.0", 8800, messageQueue)
+		adminServer, err = NewAdminServer("0.0.0.0", 8800, messageQueue)
 		So(err, ShouldBeNil)
-		So(entrance, ShouldNotBeNil)
+		So(adminServer, ShouldNotBeNil)
 
 		go func() {
-			entrance.ListenAndServe()
+			adminServer.ListenAndServe()
 		}()
 	})
 }
@@ -183,7 +183,7 @@ func TestAdminRemove(t *testing.T) {
 
 func TestCloseAdmin(t *testing.T) {
 	Convey("Test Close Admin", t, func() {
-		entrance.Stop()
+		adminServer.Stop()
 		messageQueue.Close()
 		messageQueue = nil
 		storage = nil

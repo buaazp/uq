@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	httpprof "net/http/pprof"
 	"strings"
 
 	"github.com/buaazp/uq/queue"
@@ -11,8 +12,12 @@ import (
 )
 
 const (
-	queuePrefixV1 = "/v1/queues"
-	adminPrefixV1 = "/v1/admin"
+	queuePrefixV1      = "/v1/queues"
+	adminPrefixV1      = "/v1/admin"
+	pprofPrefixCmd     = "/debug/pprof/cmdline"
+	pprofPrefixProfile = "/debug/pprof/profile"
+	pprofPrefixSymbol  = "/debug/pprof/symbol"
+	pprofPrefixIndex   = "/debug/pprof"
 )
 
 type HttpEntry struct {
@@ -58,6 +63,18 @@ func (h *HttpEntry) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	} else if strings.HasPrefix(req.URL.Path, adminPrefixV1) {
 		key := req.URL.Path[len(adminPrefixV1):]
 		h.adminHandler(w, req, key)
+		return
+	} else if strings.HasPrefix(req.URL.Path, pprofPrefixCmd) {
+		httpprof.Cmdline(w, req)
+		return
+	} else if strings.HasPrefix(req.URL.Path, pprofPrefixProfile) {
+		httpprof.Profile(w, req)
+		return
+	} else if strings.HasPrefix(req.URL.Path, pprofPrefixSymbol) {
+		httpprof.Symbol(w, req)
+		return
+	} else if strings.HasPrefix(req.URL.Path, pprofPrefixIndex) {
+		httpprof.Index(w, req)
 		return
 	}
 

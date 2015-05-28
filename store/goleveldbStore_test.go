@@ -7,13 +7,14 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-const (
-	dbPath = "/tmp/uq.store.test.db"
+var (
+	ldb    Storage
+	dbPath string
 )
 
-var (
-	ldb Storage
-)
+func init() {
+	dbPath = os.TempDir() + "/uq.store.test.db"
+}
 
 func TestNewLevelStore(t *testing.T) {
 	Convey("Test New Level Store", t, func() {
