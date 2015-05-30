@@ -1,78 +1,78 @@
 package entry
 
 import (
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
-func (r *RedisEntry) OnQadd(cmd *Command) *Reply {
-	key := cmd.StringAtIndex(1)
-	recycle := cmd.StringAtIndex(2)
+func (r *RedisEntry) onQadd(cmd *command) *reply {
+	key := cmd.stringAtIndex(1)
+	recycle := cmd.stringAtIndex(2)
 
 	// log.Printf("creating... %s %s", key, recycle)
 	err := r.messageQueue.Create(key, recycle)
 	if err != nil {
-		return ErrorReply(err)
+		return errorReply(err)
 	}
-	return StatusReply("OK")
+	return statusReply("OK")
 }
 
-func (r *RedisEntry) OnQpush(cmd *Command) *Reply {
-	key := cmd.StringAtIndex(1)
-	val, err := cmd.ArgAtIndex(2)
+func (r *RedisEntry) onQpush(cmd *command) *reply {
+	key := cmd.stringAtIndex(1)
+	val, err := cmd.argAtIndex(2)
 	if err != nil {
-		return ErrorReply(NewError(
-			ErrBadRequest,
+		return errorReply(utils.NewError(
+			utils.ErrBadRequest,
 			err.Error(),
 		))
 	}
 
 	err = r.messageQueue.Push(key, val)
 	if err != nil {
-		return ErrorReply(err)
+		return errorReply(err)
 	}
-	return StatusReply("OK")
+	return statusReply("OK")
 }
 
-func (r *RedisEntry) OnQmpush(cmd *Command) *Reply {
-	key := cmd.StringAtIndex(1)
-	vals := cmd.Args()[2:]
+func (r *RedisEntry) onQmpush(cmd *command) *reply {
+	key := cmd.stringAtIndex(1)
+	vals := cmd.args[2:]
 
 	err := r.messageQueue.MultiPush(key, vals)
 	if err != nil {
-		return ErrorReply(err)
+		return errorReply(err)
 	}
 
-	return StatusReply("OK")
+	return statusReply("OK")
 }
 
-func (r *RedisEntry) OnQpop(cmd *Command) *Reply {
-	key := cmd.StringAtIndex(1)
+func (r *RedisEntry) onQpop(cmd *command) *reply {
+	key := cmd.stringAtIndex(1)
 
 	id, value, err := r.messageQueue.Pop(key)
 	if err != nil {
-		return ErrorReply(err)
+		return errorReply(err)
 	}
 
 	vals := make([]interface{}, 2)
 	vals[0] = value
 	vals[1] = id
 
-	return MultiBulksReply(vals)
+	return multiBulksReply(vals)
 }
 
-func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
-	key := cmd.StringAtIndex(1)
-	n, err := cmd.IntAtIndex(2)
+func (r *RedisEntry) onQmpop(cmd *command) *reply {
+	key := cmd.stringAtIndex(1)
+	n, err := cmd.intAtIndex(2)
 	if err != nil {
-		return ErrorReply(NewError(
-			ErrBadRequest,
+		return errorReply(utils.NewError(
+			utils.ErrBadRequest,
 			err.Error(),
 		))
 	}
 
 	ids, values, err := r.messageQueue.MultiPop(key, n)
 	if err != nil {
-		return ErrorReply(err)
+		return errorReply(err)
 	}
 
 	np := len(ids)
@@ -86,23 +86,23 @@ func (r *RedisEntry) OnQmpop(cmd *Command) *Reply {
 		index++
 	}
 
-	return MultiBulksReply(vals)
+	return multiBulksReply(vals)
 }
 
-func (r *RedisEntry) OnQdel(cmd *Command) *Reply {
-	key := cmd.StringAtIndex(1)
+func (r *RedisEntry) onQdel(cmd *command) *reply {
+	key := cmd.stringAtIndex(1)
 
 	err := r.messageQueue.Confirm(key)
 	if err != nil {
 		// log.Printf("confirm error: %s", err)
-		return ErrorReply(err)
+		return errorReply(err)
 	}
 
-	return StatusReply("OK")
+	return statusReply("OK")
 }
 
-func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
-	keys := cmd.StringArgs()[1:]
+func (r *RedisEntry) onQmdel(cmd *command) *reply {
+	keys := cmd.stringArgs()[1:]
 	// log.Printf("keys: %v", keys)
 
 	errs := r.messageQueue.MultiConfirm(keys)
@@ -116,25 +116,25 @@ func (r *RedisEntry) OnQmdel(cmd *Command) *Reply {
 		}
 	}
 
-	return MultiBulksReply(vals)
+	return multiBulksReply(vals)
 }
 
-func (r *RedisEntry) OnQempty(cmd *Command) *Reply {
-	key := cmd.StringAtIndex(1)
+func (r *RedisEntry) onQempty(cmd *command) *reply {
+	key := cmd.stringAtIndex(1)
 
 	err := r.messageQueue.Empty(key)
 	if err != nil {
-		return ErrorReply(err)
+		return errorReply(err)
 	}
-	return StatusReply("OK")
+	return statusReply("OK")
 }
 
-func (r *RedisEntry) OnInfo(cmd *Command) *Reply {
-	key := cmd.StringAtIndex(1)
+func (r *RedisEntry) onInfo(cmd *command) *reply {
+	key := cmd.stringAtIndex(1)
 
 	qs, err := r.messageQueue.Stat(key)
 	if err != nil {
-		return ErrorReply(err)
+		return errorReply(err)
 	}
 
 	// for human reading
@@ -143,16 +143,16 @@ func (r *RedisEntry) OnInfo(cmd *Command) *Reply {
 	for i, str := range strs {
 		vals[i] = str
 	}
-	return MultiBulksReply(vals)
+	return multiBulksReply(vals)
 
 	// for json format
-	// data, err := qs.ToJson()
+	// data, err := qs.ToJSON()
 	// if err != nil {
-	// 	return ErrorReply(NewError(
-	// 		ErrInternalError,
+	// 	return errorReply(utils.NewError(
+	// 		utils.ErrInternalError,
 	// 		err.Error(),
 	// 	))
 	// }
 
-	// return StatusReply(string(data))
+	// return statusReply(string(data))
 }

@@ -9,30 +9,31 @@ import (
 	"strings"
 
 	"github.com/buaazp/uq/queue"
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
+// McEntry is the memcached entrance of uq
 type McEntry struct {
 	host         string
 	port         int
-	stopListener *StopListener
+	stopListener *utils.StopListener
 	messageQueue queue.MessageQueue
 }
 
-type Item struct {
-	Flag    int
-	Exptime int
-	Cas     int
-	Body    []byte
+type item struct {
+	flag    int
+	expTime int
+	body    []byte
 }
 
-type Request struct {
-	Cmd     string   // get, set, delete, quit, etc.
-	Keys    []string // key
-	Item    *Item
-	NoReply bool
+type request struct {
+	cmd     string   // get, set, delete, quit, etc.
+	keys    []string // key
+	item    *item
+	noReply bool
 }
 
+// NewMcEntry returns a new McEntry server
 func NewMcEntry(host string, port int, messageQueue queue.MessageQueue) (*McEntry, error) {
 	mc := new(McEntry)
 	mc.host = host
@@ -41,117 +42,117 @@ func NewMcEntry(host string, port int, messageQueue queue.MessageQueue) (*McEntr
 	return mc, nil
 }
 
-func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
+func (m *McEntry) read(b *bufio.Reader) (*request, error) {
 	s, err := b.ReadString('\n')
 	if err != nil {
 		log.Println("readstring failed: ", err)
-		return nil, NewError(
-			ErrBadRequest,
+		return nil, utils.NewError(
+			utils.ErrBadRequest,
 			err.Error(),
 		)
 	}
 	if !strings.HasSuffix(s, "\r\n") {
-		return nil, NewError(
-			ErrBadRequest,
+		return nil, utils.NewError(
+			utils.ErrBadRequest,
 			`has not suffix \r\n`,
 		)
 	}
 	parts := strings.Fields(s)
 	if len(parts) < 1 {
-		return nil, NewError(
-			ErrBadRequest,
+		return nil, utils.NewError(
+			utils.ErrBadRequest,
 			`cmd fields error < 1`,
 		)
 	}
 
-	req := new(Request)
-	req.Cmd = parts[0]
-	switch req.Cmd {
+	req := new(request)
+	req.cmd = parts[0]
+	switch req.cmd {
 	case "get", "gets", "stats":
 		if len(parts) < 2 {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`cmd parts error: < 2`,
 			)
 		}
-		req.Keys = parts[1:]
+		req.keys = parts[1:]
 
 	case "set", "add":
 		if len(parts) < 5 || len(parts) > 7 {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`cmd parts error: < 5 or > 7`,
 			)
 		}
-		req.Keys = parts[1:2]
-		item := new(Item)
-		item.Flag, err = strconv.Atoi(parts[2])
+		req.keys = parts[1:2]
+		item := new(item)
+		item.flag, err = strconv.Atoi(parts[2])
 		if err != nil {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`flag atoi failed: `+err.Error(),
 			)
 		}
-		item.Exptime, err = strconv.Atoi(parts[3])
+		item.expTime, err = strconv.Atoi(parts[3])
 		if err != nil {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`exptime atoi failed: `+err.Error(),
 			)
 		}
 		length, err := strconv.Atoi(parts[4])
 		if err != nil {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`length atoi failed: `+err.Error(),
 			)
 		}
 		if length > MaxBodyLength {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`bad data length`,
 			)
 		}
 		if len(parts) > 5 && parts[5] != "noreply" {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`cmd parts error: > 5 or part[5] != noreply`,
 			)
 		}
-		req.NoReply = len(parts) > 5 && parts[5] == "noreply"
+		req.noReply = len(parts) > 5 && parts[5] == "noreply"
 
-		item.Body = make([]byte, length)
-		_, err = io.ReadFull(b, item.Body)
+		item.body = make([]byte, length)
+		_, err = io.ReadFull(b, item.body)
 		if err != nil {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`readfull failed: `+err.Error(),
 			)
 		}
 		remain, _, err := b.ReadLine()
 		if err != nil {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`readline failed: `+err.Error(),
 			)
 		}
 		if len(remain) != 0 {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`bad data chunk`,
 			)
 		}
-		req.Item = item
+		req.item = item
 
 	case "delete":
 		if len(parts) < 2 || len(parts) > 4 {
-			return nil, NewError(
-				ErrBadRequest,
+			return nil, utils.NewError(
+				utils.ErrBadRequest,
 				`cmd parts error: < 2 or > 4`,
 			)
 		}
-		req.Keys = parts[1:2]
-		req.NoReply = len(parts) > 2 && parts[len(parts)-1] == "noreply"
+		req.keys = parts[1:2]
+		req.noReply = len(parts) > 2 && parts[len(parts)-1] == "noreply"
 
 	case "quit", "version", "flush_all":
 	case "replace", "cas", "append", "prepend":
@@ -159,20 +160,20 @@ func (m *McEntry) Read(b *bufio.Reader) (*Request, error) {
 	case "verbosity":
 
 	default:
-		return nil, NewError(
-			ErrBadRequest,
-			`unknow command: `+req.Cmd,
+		return nil, utils.NewError(
+			utils.ErrBadRequest,
+			`unknow command: `+req.cmd,
 		)
 	}
 	return req, nil
 }
 
-func writeErrorMc(resp *Response, err error) {
+func writeErrorMc(resp *response, err error) {
 	if err == nil {
 		return
 	}
 	switch e := err.(type) {
-	case *Error:
+	case *utils.Error:
 		if e.ErrorCode >= 500 {
 			resp.status = "SERVER_ERROR"
 		} else {
@@ -186,25 +187,25 @@ func writeErrorMc(resp *Response, err error) {
 	}
 }
 
-func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
+func (m *McEntry) process(req *request) (resp *response, quit bool) {
 	var err error
-	resp = new(Response)
+	resp = new(response)
 	quit = false
-	resp.noreply = req.NoReply
+	resp.noreply = req.noReply
 
-	switch req.Cmd {
+	switch req.cmd {
 	case "get", "gets":
-		for _, k := range req.Keys {
+		for _, k := range req.keys {
 			if len(k) > MaxKeyLength {
-				writeErrorMc(resp, NewError(
-					ErrBadKey,
+				writeErrorMc(resp, utils.NewError(
+					utils.ErrBadKey,
 					`key is too long`,
 				))
 				return
 			}
 		}
 
-		key := req.Keys[0]
+		key := req.keys[0]
 		resp.status = "VALUE"
 		id, data, err := m.messageQueue.Pop(key)
 		if err != nil {
@@ -212,22 +213,22 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 			return
 		}
 
-		itemMsg := new(Item)
-		itemMsg.Body = data
-		items := make(map[string]*Item)
+		itemMsg := new(item)
+		itemMsg.body = data
+		items := make(map[string]*item)
 		items[key] = itemMsg
 
-		if len(req.Keys) > 1 {
-			keyID := req.Keys[1]
-			itemID := new(Item)
-			itemID.Body = []byte(id)
+		if len(req.keys) > 1 {
+			keyID := req.keys[1]
+			itemID := new(item)
+			itemID.body = []byte(id)
 			items[keyID] = itemID
 		}
 
 		resp.items = items
 
 	case "stats":
-		key := req.Keys[0]
+		key := req.keys[0]
 		resp.status = "STAT"
 		qs, err := m.messageQueue.Stat(key)
 		if err != nil {
@@ -239,7 +240,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		resp.msg = qs.ToMcString()
 
 		// for json format
-		// data, err := qs.ToJson()
+		// data, err := qs.ToJSON()
 		// if err != nil {
 		// 	writeErrorMc(resp, NewError(
 		// 		ErrInternalError,
@@ -250,8 +251,8 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		// resp.msg = string(data)
 
 	case "add":
-		key := req.Keys[0]
-		recycle := string(req.Item.Body)
+		key := req.keys[0]
+		recycle := string(req.item.body)
 
 		// log.Printf("creating... %s %s", key, recycle)
 		err = m.messageQueue.Create(key, recycle)
@@ -262,8 +263,8 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		resp.status = "STORED"
 
 	case "set":
-		key := req.Keys[0]
-		err = m.messageQueue.Push(key, req.Item.Body)
+		key := req.keys[0]
+		err = m.messageQueue.Push(key, req.item.body)
 		if err != nil {
 			writeErrorMc(resp, err)
 			return
@@ -271,7 +272,7 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 		resp.status = "STORED"
 
 	case "delete":
-		key := req.Keys[0]
+		key := req.keys[0]
 
 		err = m.messageQueue.Confirm(key)
 		if err != nil {
@@ -287,9 +288,9 @@ func (m *McEntry) Process(req *Request) (resp *Response, quit bool) {
 
 	default:
 		// client error
-		writeErrorMc(resp, NewError(
-			ErrBadRequest,
-			`unknow command: `+req.Cmd,
+		writeErrorMc(resp, utils.NewError(
+			utils.ErrBadRequest,
+			`unknow command: `+req.cmd,
 		))
 	}
 	return
@@ -303,12 +304,12 @@ func (m *McEntry) handlerConn(conn net.Conn) {
 	wbuf := bufio.NewWriter(conn)
 
 	for {
-		req, err := m.Read(rbuf)
+		req, err := m.read(rbuf)
 		if err != nil {
 			if strings.Contains(err.Error(), "EOF") {
 				break
 			} else {
-				resp := new(Response)
+				resp := new(response)
 				writeErrorMc(resp, err)
 				resp.Write(wbuf)
 				wbuf.Flush()
@@ -316,7 +317,7 @@ func (m *McEntry) handlerConn(conn net.Conn) {
 			}
 		}
 
-		resp, quit := m.Process(req)
+		resp, quit := m.process(req)
 		if quit {
 			break
 		}
@@ -338,14 +339,15 @@ func (m *McEntry) handlerConn(conn net.Conn) {
 	return
 }
 
+// ListenAndServe implements the ListenAndServe interface
 func (m *McEntry) ListenAndServe() error {
-	addr := Addrcat(m.host, m.port)
+	addr := utils.Addrcat(m.host, m.port)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
-	stopListener, err := NewStopListener(l)
+	stopListener, err := utils.NewStopListener(l)
 	if err != nil {
 		return err
 	}
@@ -363,6 +365,7 @@ func (m *McEntry) ListenAndServe() error {
 	}
 }
 
+// Stop implements the Stop interface
 func (m *McEntry) Stop() {
 	log.Printf("mc entry stoping...")
 	m.stopListener.Stop()

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
 var host, method, topicName, lineName string
@@ -33,7 +33,7 @@ func init() {
 
 func initQueue() {
 	var mc *memcache.Client
-	conn := Addrcat(host, port)
+	conn := utils.Addrcat(host, port)
 	mc = memcache.New(conn)
 
 	err := mc.Add(&memcache.Item{Key: topicName, Value: []byte{}})
@@ -67,7 +67,7 @@ func setTestSingle(ch chan bool, mc *memcache.Client, cn, n int) {
 
 func setTest(c, n int) {
 	ch := make(chan bool)
-	conn := Addrcat(host, port)
+	conn := utils.Addrcat(host, port)
 	mc := memcache.New(conn)
 	singleCount := n / c
 	for i := 0; i < c; i++ {
@@ -83,7 +83,7 @@ func setTest(c, n int) {
 
 func getTestSingle(ch chan bool, cn, n int) {
 	var mc *memcache.Client
-	conn := Addrcat(host, port)
+	conn := utils.Addrcat(host, port)
 	key := topicName + "/" + lineName
 	keys := []string{key, "id"}
 	mc = memcache.New(conn)

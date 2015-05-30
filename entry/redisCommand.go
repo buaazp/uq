@@ -6,39 +6,35 @@ import (
 	"fmt"
 	"strconv"
 
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
-type Command struct {
+type command struct {
 	args  [][]byte
 	attrs map[string]interface{}
 }
 
-func NewCommand(args ...[]byte) (cmd *Command) {
-	cmd = &Command{
+func newCommand(args ...[]byte) (cmd *command) {
+	cmd = &command{
 		args:  args,
 		attrs: make(map[string]interface{}),
 	}
 	return
 }
 
-func (cmd *Command) SetAttribute(name string, v interface{}) {
+func (cmd *command) setAttribute(name string, v interface{}) {
 	cmd.attrs[name] = v
 }
 
-func (cmd *Command) GetAttribute(name string) interface{} {
+func (cmd *command) getAttribute(name string) interface{} {
 	return cmd.attrs[name]
 }
 
-func (cmd *Command) Name() string {
+func (cmd *command) name() string {
 	return string(bytes.ToUpper(cmd.args[0]))
 }
 
-func (cmd *Command) Args() [][]byte {
-	return cmd.args
-}
-
-func (cmd *Command) StringArgs() []string {
+func (cmd *command) stringArgs() []string {
 	strings := make([]string, len(cmd.args))
 	for i, arg := range cmd.args {
 		strings[i] = string(arg)
@@ -46,59 +42,59 @@ func (cmd *Command) StringArgs() []string {
 	return strings
 }
 
-func (cmd *Command) StringAtIndex(i int) string {
-	if i >= cmd.Len() {
+func (cmd *command) stringAtIndex(i int) string {
+	if i >= cmd.length() {
 		return ""
 	}
 	return string(cmd.args[i])
 }
 
-func (cmd *Command) ArgAtIndex(i int) (arg []byte, err error) {
-	if i >= cmd.Len() {
-		err = errors.New(fmt.Sprintf("out of range %d/%d", i, cmd.Len()))
+func (cmd *command) argAtIndex(i int) (arg []byte, err error) {
+	if i >= cmd.length() {
+		err = fmt.Errorf("out of range %d/%d", i, cmd.length())
 		return
 	}
 	arg = cmd.args[i]
 	return
 }
 
-func (cmd *Command) IntAtIndex(i int) (n int, err error) {
-	if i >= cmd.Len() {
-		err = errors.New(fmt.Sprintf("out of range %d/%d", i, cmd.Len()))
+func (cmd *command) intAtIndex(i int) (n int, err error) {
+	if i >= cmd.length() {
+		err = fmt.Errorf("out of range %d/%d", i, cmd.length())
 		return
 	}
 	n, err = strconv.Atoi(string(cmd.args[i]))
 	return
 }
 
-func (cmd *Command) Int64AtIndex(i int) (n int64, err error) {
-	if i >= cmd.Len() {
-		err = errors.New(fmt.Sprintf("out of range %d/%d", i, cmd.Len()))
+func (cmd *command) int64AtIndex(i int) (n int64, err error) {
+	if i >= cmd.length() {
+		err = fmt.Errorf("out of range %d/%d", i, cmd.length())
 		return
 	}
 	n, err = strconv.ParseInt(string(cmd.args[i]), 10, 0)
 	return
 }
 
-func (cmd *Command) Uint64AtIndex(i int) (n uint64, err error) {
-	if i >= cmd.Len() {
-		err = errors.New(fmt.Sprintf("out of range %d/%d", i, cmd.Len()))
+func (cmd *command) uint64AtIndex(i int) (n uint64, err error) {
+	if i >= cmd.length() {
+		err = fmt.Errorf("out of range %d/%d", i, cmd.length())
 		return
 	}
 	n, err = strconv.ParseUint(string(cmd.args[i]), 10, 0)
 	return
 }
 
-func (cmd *Command) FloatAtIndex(i int) (n float64, err error) {
-	if i >= cmd.Len() {
-		err = errors.New(fmt.Sprintf("out of range %d/%d", i, cmd.Len()))
+func (cmd *command) floatAtIndex(i int) (n float64, err error) {
+	if i >= cmd.length() {
+		err = fmt.Errorf("out of range %d/%d", i, cmd.length())
 		return
 	}
 	n, err = strconv.ParseFloat(string(cmd.args[i]), 64)
 	return
 }
 
-func (cmd *Command) Len() int {
+func (cmd *command) length() int {
 	return len(cmd.args)
 }
 
@@ -110,16 +106,16 @@ $<number of bytes of argument 1> CR LF
 $<number of bytes of argument N> CR LF
 <argument data> CR LF
 */
-func (cmd *Command) Bytes() []byte {
+func (cmd *command) bytes() []byte {
 	buf := bytes.Buffer{}
 	buf.WriteByte('*')
-	argCount := cmd.Len()
-	buf.WriteString(ItoaQuick(argCount)) //<number of arguments>
+	argCount := cmd.length()
+	buf.WriteString(utils.ItoaQuick(argCount)) //<number of arguments>
 	buf.WriteString(CRLF)
 	for i := 0; i < argCount; i++ {
 		buf.WriteByte('$')
 		argSize := len(cmd.args[i])
-		buf.WriteString(ItoaQuick(argSize)) //<number of bytes of argument i>
+		buf.WriteString(utils.ItoaQuick(argSize)) //<number of bytes of argument i>
 		buf.WriteString(CRLF)
 		buf.Write(cmd.args[i]) //<argument data>
 		buf.WriteString(CRLF)
@@ -127,7 +123,7 @@ func (cmd *Command) Bytes() []byte {
 	return buf.Bytes()
 }
 
-func ParseCommand(buf *bytes.Buffer) (*Command, error) {
+func parseCommand(buf *bytes.Buffer) (*command, error) {
 	// Read ( *<number of arguments> CR LF )
 	if c, err := buf.ReadByte(); c != '*' { // io.EOF
 		return nil, err
@@ -165,13 +161,13 @@ func ParseCommand(buf *bytes.Buffer) (*Command, error) {
 			return nil, err
 		}
 	}
-	cmd := NewCommand(args...)
+	cmd := newCommand(args...)
 	return cmd, nil
 }
 
-func (cmd *Command) String() string {
+func (cmd *command) String() string {
 	buf := bytes.Buffer{}
-	for i, count := 0, cmd.Len(); i < count; i++ {
+	for i, count := 0, cmd.length(); i < count; i++ {
 		if i > 0 {
 			buf.WriteString(" ")
 		}

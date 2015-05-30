@@ -1,7 +1,8 @@
 language: go
 
 go:
-  - 1.4.2
+  - 1.4
+  - tip
 
 before_install:
   - go get -v github.com/axw/gocov/gocov
@@ -16,7 +17,7 @@ install:
 
 script:
   - go vet ./...
-  - $HOME/gopath/bin/golint .
+  - $HOME/gopath/bin/golint ./...
   - go test -v ./admin
   - go test -v ./entry
   - go test -v ./queue

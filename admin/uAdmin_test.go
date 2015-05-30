@@ -15,7 +15,7 @@ import (
 var (
 	storage      store.Storage
 	messageQueue queue.MessageQueue
-	adminServer  AdminServer
+	adminServer  Administrator
 	client       *http.Client
 )
 
@@ -33,7 +33,7 @@ func TestNewAdmin(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(messageQueue, ShouldNotBeNil)
 
-		adminServer, err = NewAdminServer("0.0.0.0", 8800, messageQueue)
+		adminServer, err = NewUnitedAdmin("0.0.0.0", 8800, messageQueue)
 		So(err, ShouldBeNil)
 		So(adminServer, ShouldNotBeNil)
 
@@ -144,7 +144,7 @@ func TestAdminStat(t *testing.T) {
 
 		body, err := ioutil.ReadAll(resp.Body)
 		So(err, ShouldBeNil)
-		var qs queue.QueueStat
+		var qs queue.Stat
 		err = json.Unmarshal(body, &qs)
 		So(err, ShouldBeNil)
 		So(qs.Name, ShouldEqual, "foo/x")

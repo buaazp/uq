@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
 func init() {
@@ -110,10 +110,9 @@ func (l *line) updateiHead() {
 		}
 		if fl {
 			return
-		} else {
-			delete(l.imap, id)
-			l.ihead++
 		}
+		delete(l.imap, id)
+		l.ihead++
 	}
 }
 
@@ -149,8 +148,8 @@ func (l *line) pop() (uint64, []byte, error) {
 	topicTail := l.t.getTail()
 	if l.head >= topicTail {
 		// log.Printf("line[%s] is blank. head:%d - tail:%d", l.name, l.head, l.t.tail)
-		return 0, nil, NewError(
-			ErrNone,
+		return 0, nil, utils.NewError(
+			utils.ErrNone,
 			`line pop`,
 		)
 	}
@@ -180,8 +179,8 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 	defer l.inflightLock.Unlock()
 
 	fc := 0
-	ids := make([]uint64, 0)
-	datas := make([][]byte, 0)
+	var ids []uint64
+	var datas [][]byte
 	now := time.Now()
 	if l.recycle > 0 {
 		for m := l.inflight.Front(); m != nil && fc < n; m = m.Next() {
@@ -247,16 +246,16 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 	if len(ids) > 0 {
 		return ids, datas, nil
 	}
-	return nil, nil, NewError(
-		ErrNone,
+	return nil, nil, utils.NewError(
+		utils.ErrNone,
 		`line mPop`,
 	)
 }
 
 func (l *line) confirm(id uint64) error {
 	if l.recycle == 0 {
-		return NewError(
-			ErrNotDelivered,
+		return utils.NewError(
+			utils.ErrNotDelivered,
 			`line confirm`,
 		)
 	}
@@ -265,8 +264,8 @@ func (l *line) confirm(id uint64) error {
 	defer l.headLock.RUnlock()
 	head := l.head
 	if id >= head {
-		return NewError(
-			ErrNotDelivered,
+		return utils.NewError(
+			utils.ErrNotDelivered,
 			`line confirm`,
 		)
 	}
@@ -285,19 +284,19 @@ func (l *line) confirm(id uint64) error {
 		}
 	}
 
-	return NewError(
-		ErrNotDelivered,
+	return utils.NewError(
+		utils.ErrNotDelivered,
 		`line confirm`,
 	)
 }
 
-func (l *line) stat() *QueueStat {
+func (l *line) stat() *Stat {
 	l.inflightLock.RLock()
 	defer l.inflightLock.RUnlock()
 	l.headLock.RLock()
 	defer l.headLock.RUnlock()
 
-	qs := new(QueueStat)
+	qs := new(Stat)
 	qs.Name = l.t.name + "/" + l.name
 	qs.Type = "line"
 	qs.Recycle = l.recycle.String()

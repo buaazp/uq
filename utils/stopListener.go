@@ -6,13 +6,15 @@ import (
 	"time"
 )
 
+// StopListener is a stopable listener
 type StopListener struct {
 	*net.TCPListener          //Wrapped listener
 	stop             chan int //Channel used only to indicate listener should shutdown
 }
 
-var StoppedError = errors.New("Listener stopped")
+var errStopped = errors.New("Listener stopped")
 
+// NewStopListener returns a new StopListener with a net listener
 func NewStopListener(l net.Listener) (*StopListener, error) {
 	tcpL, ok := l.(*net.TCPListener)
 
@@ -27,6 +29,7 @@ func NewStopListener(l net.Listener) (*StopListener, error) {
 	return retval, nil
 }
 
+// Accept implements the Accept interface
 func (sl *StopListener) Accept() (net.Conn, error) {
 	for {
 		//Wait up to one second for a new connection
@@ -37,7 +40,7 @@ func (sl *StopListener) Accept() (net.Conn, error) {
 		//Check for the channel being closed
 		select {
 		case <-sl.stop:
-			return nil, StoppedError
+			return nil, errStopped
 		default:
 			//If the channel is still open, continue as normal
 		}
@@ -56,6 +59,7 @@ func (sl *StopListener) Accept() (net.Conn, error) {
 	}
 }
 
+// Stop implements the Stop interface
 func (sl *StopListener) Stop() {
 	close(sl.stop)
 }

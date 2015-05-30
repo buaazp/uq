@@ -11,7 +11,7 @@ import (
 
 	"github.com/buaazp/uq/queue"
 	"github.com/buaazp/uq/store"
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
 var (
@@ -51,7 +51,7 @@ func main() {
 
 	err = messageQueue.Create(*topic, "")
 	if err != nil {
-		if e := err.(*Error); e.ErrorCode != ErrTopicExisted {
+		if e := err.(*utils.Error); e.ErrorCode != utils.ErrTopicExisted {
 			fmt.Printf("topic create error: %s\n", err)
 			return
 		}

@@ -9,17 +9,17 @@ import (
 	"net"
 	"strconv"
 
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
-type Session struct {
+type session struct {
 	net.Conn
 	rw    *bufio.Reader
 	attrs map[string]interface{}
 }
 
-func NewSession(conn net.Conn) (s *Session) {
-	s = &Session{
+func newSession(conn net.Conn) (s *session) {
+	s = &session{
 		Conn:  conn,
 		attrs: make(map[string]interface{}),
 	}
@@ -27,64 +27,63 @@ func NewSession(conn net.Conn) (s *Session) {
 	return
 }
 
-func (s *Session) SetAttribute(name string, v interface{}) {
+func (s *session) setAttribute(name string, v interface{}) {
 	s.attrs[name] = v
 }
 
-func (s *Session) GetAttribute(name string) interface{} {
+func (s *session) getAttribute(name string) interface{} {
 	return s.attrs[name]
 }
 
-func (s *Session) WriteReply(reply *Reply) (err error) {
-	switch reply.Type {
-	case ReplyTypeStatus:
-		err = s.replyStatus(reply.Value.(string))
-	case ReplyTypeError:
-		err = s.replyError(reply.Value.(string))
-	case ReplyTypeInteger:
-		err = s.replyInteger(reply.Value.(int))
-	case ReplyTypeBulk:
-		err = s.replyBulk(reply.Value)
-	case ReplyTypeMultiBulks:
-		err = s.replyMultiBulks(reply.Value.([]interface{}))
+func (s *session) writeReply(rep *reply) (err error) {
+	switch rep.rType {
+	case replyTypeStatus:
+		err = s.replyStatus(rep.value.(string))
+	case replyTypeError:
+		err = s.replyError(rep.value.(string))
+	case replyTypeInteger:
+		err = s.replyInteger(rep.value.(int))
+	case replyTypeBulk:
+		err = s.replyBulk(rep.value)
+	case replyTypeMultiBulks:
+		err = s.replyMultiBulks(rep.value.([]interface{}))
 	default:
-		err = errors.New("Illegal ReplyType: " + ItoaQuick(int(reply.Type)))
+		err = errors.New("Illegal ReplyType: " + utils.ItoaQuick(int(rep.rType)))
 	}
 	return
 }
 
-func (s *Session) WriteCommand(cmd *Command) (err error) {
-	_, err = s.Write(cmd.Bytes())
+func (s *session) writeCommand(cmd *command) (err error) {
+	_, err = s.Write(cmd.bytes())
 	return
 }
 
-/*
-In a Status Reply the first byte of the reply is "+"
-In an Error Reply the first byte of the reply is "-"
-In an Integer Reply the first byte of the reply is ":"
-In a Bulk Reply the first byte of the reply is "$"
-In a Multi Bulk Reply the first byte of the reply s "*"
-*/
-func (s *Session) ReadReply() (reply *Reply, err error) {
+// ReadReply reads the reply from the session
+// In a Status Reply the first byte of the reply is "+"
+// In an Error Reply the first byte of the reply is "-"
+// In an Integer Reply the first byte of the reply is ":"
+// In a Bulk Reply the first byte of the reply is "$"
+// In a Multi Bulk Reply the first byte of the reply s "*"
+func (s *session) readReply() (rep *reply, err error) {
 	reader := s.rw
 	var c byte
 	if c, err = reader.ReadByte(); err != nil {
 		return
 	}
 
-	reply = &Reply{}
+	rep = &reply{}
 	switch c {
 	case '+':
-		reply.Type = ReplyTypeStatus
-		reply.Value, err = s.readString()
+		rep.rType = replyTypeStatus
+		rep.value, err = s.readString()
 	case '-':
-		reply.Type = ReplyTypeError
-		reply.Value, err = s.readString()
+		rep.rType = replyTypeError
+		rep.value, err = s.readString()
 	case ':':
-		reply.Type = ReplyTypeInteger
-		reply.Value, err = s.readInt()
+		rep.rType = replyTypeInteger
+		rep.value, err = s.readInt()
 	case '$':
-		reply.Type = ReplyTypeBulk
+		rep.rType = replyTypeBulk
 		var bufsize int
 		bufsize, err = s.readInt()
 		if err != nil {
@@ -95,17 +94,17 @@ func (s *Session) ReadReply() (reply *Reply, err error) {
 		if err != nil {
 			break
 		}
-		reply.Value = buf
+		rep.value = buf
 		s.skipBytes([]byte{CR, LF})
 	case '*':
-		reply.Type = ReplyTypeMultiBulks
+		rep.rType = replyTypeMultiBulks
 		var argCount int
 		argCount, err = s.readInt()
 		if err != nil {
 			break
 		}
 		if argCount == -1 {
-			reply.Value = nil // *-1
+			rep.value = nil // *-1
 		} else {
 			args := make([]interface{}, argCount)
 			for i := 0; i < argCount; i++ {
@@ -131,7 +130,7 @@ func (s *Session) ReadReply() (reply *Reply, err error) {
 				}
 				s.skipBytes([]byte{CR, LF})
 			}
-			reply.Value = args
+			rep.value = args
 		}
 	default:
 		err = errors.New("Bad Reply Flag:" + string([]byte{c}))
@@ -147,7 +146,7 @@ $<number of bytes of argument 1> CR LF
 $<number of bytes of argument N> CR LF
 <argument data> CR LF
 */
-func (s *Session) ReadCommand() (cmd *Command, err error) {
+func (s *session) readCommand() (cmd *command, err error) {
 	// Read ( *<number of arguments> CR LF )
 	err = s.skipByte('*')
 	if err != nil { // io.EOF
@@ -184,12 +183,12 @@ func (s *Session) ReadCommand() (cmd *Command, err error) {
 			return
 		}
 	}
-	cmd = NewCommand(args...)
+	cmd = newCommand(args...)
 	return
 }
 
 // Status reply
-func (s *Session) replyStatus(status string) (err error) {
+func (s *session) replyStatus(status string) (err error) {
 	buf := bytes.Buffer{}
 	buf.WriteString("+")
 	buf.WriteString(status)
@@ -199,7 +198,7 @@ func (s *Session) replyStatus(status string) (err error) {
 }
 
 // Error reply
-func (s *Session) replyError(errmsg string) (err error) {
+func (s *session) replyError(errmsg string) (err error) {
 	buf := bytes.Buffer{}
 	buf.WriteString("-")
 	buf.WriteString(errmsg)
@@ -209,17 +208,17 @@ func (s *Session) replyError(errmsg string) (err error) {
 }
 
 // Integer reply
-func (s *Session) replyInteger(i int) (err error) {
+func (s *session) replyInteger(i int) (err error) {
 	buf := bytes.Buffer{}
 	buf.WriteString(":")
-	buf.WriteString(ItoaQuick(i))
+	buf.WriteString(utils.ItoaQuick(i))
 	buf.WriteString(CRLF)
 	_, err = buf.WriteTo(s)
 	return
 }
 
 // Bulk Reply
-func (s *Session) replyBulk(bulk interface{}) (err error) {
+func (s *session) replyBulk(bulk interface{}) (err error) {
 	// NULL Bulk Reply
 	isnil := bulk == nil
 	if !isnil {
@@ -235,12 +234,12 @@ func (s *Session) replyBulk(bulk interface{}) (err error) {
 	switch bulk.(type) {
 	case []byte:
 		b := bulk.([]byte)
-		buf.WriteString(ItoaQuick(len(b)))
+		buf.WriteString(utils.ItoaQuick(len(b)))
 		buf.WriteString(CRLF)
 		buf.Write(b)
 	default:
 		b := []byte(bulk.(string))
-		buf.WriteString(ItoaQuick(len(b)))
+		buf.WriteString(utils.ItoaQuick(len(b)))
 		buf.WriteString(CRLF)
 		buf.Write(b)
 	}
@@ -250,7 +249,7 @@ func (s *Session) replyBulk(bulk interface{}) (err error) {
 }
 
 // Multi-bulk replies
-func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
+func (s *session) replyMultiBulks(bulks []interface{}) (err error) {
 	// Null Multi Bulk Reply
 	if bulks == nil {
 		_, err = s.Write([]byte("*-1\r\n"))
@@ -264,7 +263,7 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 	}
 	buf := bytes.Buffer{}
 	buf.WriteString("*")
-	buf.WriteString(ItoaQuick(bulkCount))
+	buf.WriteString(utils.ItoaQuick(bulkCount))
 	buf.WriteString(CRLF)
 	for i := 0; i < bulkCount; i++ {
 		bulk := bulks[i]
@@ -272,7 +271,7 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 		case string:
 			buf.WriteString("$")
 			b := []byte(bulk.(string))
-			buf.WriteString(ItoaQuick(len(b)))
+			buf.WriteString(utils.ItoaQuick(len(b)))
 			buf.WriteString(CRLF)
 			buf.Write(b)
 			buf.WriteString(CRLF)
@@ -283,14 +282,14 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 				buf.WriteString(CRLF)
 			} else {
 				buf.WriteString("$")
-				buf.WriteString(ItoaQuick(len(b)))
+				buf.WriteString(utils.ItoaQuick(len(b)))
 				buf.WriteString(CRLF)
 				buf.Write(b)
 				buf.WriteString(CRLF)
 			}
 		case int:
 			buf.WriteString(":")
-			buf.WriteString(ItoaQuick(bulk.(int)))
+			buf.WriteString(utils.ItoaQuick(bulk.(int)))
 			buf.WriteString(CRLF)
 		case uint64:
 			buf.WriteString(":")
@@ -310,19 +309,19 @@ func (s *Session) replyMultiBulks(bulks []interface{}) (err error) {
 // ====================================
 // io
 // ====================================
-func (s *Session) skipByte(c byte) (err error) {
+func (s *session) skipByte(c byte) (err error) {
 	var tmp byte
 	tmp, err = s.rw.ReadByte()
 	if err != nil {
 		return
 	}
 	if tmp != c {
-		err = errors.New(fmt.Sprintf("Illegal Byte [%d] != [%d]", tmp, c))
+		err = fmt.Errorf("Illegal Byte [%d] != [%d]", tmp, c)
 	}
 	return
 }
 
-func (s *Session) skipBytes(bs []byte) (err error) {
+func (s *session) skipBytes(bs []byte) (err error) {
 	for _, c := range bs {
 		err = s.skipByte(c)
 		if err != nil {
@@ -332,7 +331,7 @@ func (s *Session) skipBytes(bs []byte) (err error) {
 	return
 }
 
-func (s *Session) readLine() (line []byte, err error) {
+func (s *session) readLine() (line []byte, err error) {
 	line, err = s.rw.ReadSlice(LF)
 	if err == bufio.ErrBufferFull {
 		return nil, errors.New("line too long")
@@ -347,7 +346,7 @@ func (s *Session) readLine() (line []byte, err error) {
 	return line[:i], nil
 }
 
-func (s *Session) readString() (str string, err error) {
+func (s *session) readString() (str string, err error) {
 	var line []byte
 	if line, err = s.readLine(); err != nil {
 		return
@@ -356,7 +355,7 @@ func (s *Session) readString() (str string, err error) {
 	return
 }
 
-func (s *Session) readInt() (i int, err error) {
+func (s *session) readInt() (i int, err error) {
 	var line string
 	if line, err = s.readString(); err != nil {
 		return
@@ -365,7 +364,7 @@ func (s *Session) readInt() (i int, err error) {
 	return
 }
 
-func (s *Session) readInt64() (i int64, err error) {
+func (s *session) readInt64() (i int64, err error) {
 	var line string
 	if line, err = s.readString(); err != nil {
 		return
@@ -374,26 +373,22 @@ func (s *Session) readInt64() (i int64, err error) {
 	return
 }
 
-func (s *Session) ReadInt64() (i int64, err error) {
-	return s.readInt64()
-}
-
-func (s *Session) Read(p []byte) (n int, err error) {
+func (s *session) Read(p []byte) (n int, err error) {
 	return s.rw.Read(p)
 }
 
-func (s *Session) ReadByte() (c byte, err error) {
+func (s *session) readByte() (c byte, err error) {
 	return s.rw.ReadByte()
 }
 
-func (s *Session) PeekByte() (c byte, err error) {
+func (s *session) peekByte() (c byte, err error) {
 	if b, e := s.rw.Peek(1); e == nil {
 		c = b[0]
 	}
 	return
 }
 
-func (s *Session) ReadRDB(w io.Writer) (err error) {
+func (s *session) readRDB(w io.Writer) (err error) {
 	// Read ( $<number of bytes of RDB> CR LF )
 	if err = s.skipByte('$'); err != nil {
 		return
@@ -415,6 +410,6 @@ func (s *Session) ReadRDB(w io.Writer) (err error) {
 	return
 }
 
-func (s *Session) String() string {
-	return fmt.Sprintf("<Session:%s>", s.RemoteAddr())
+func (s *session) String() string {
+	return fmt.Sprintf("<session:%s>", s.RemoteAddr())
 }

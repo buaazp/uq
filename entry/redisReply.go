@@ -5,78 +5,76 @@ import (
 	"fmt"
 )
 
-type Reply struct {
-	Type  ReplyType
-	Value interface{}
+type reply struct {
+	rType replyType
+	value interface{}
 }
 
-type ReplyType int
-
-var NOREPLY *Reply = nil
+type replyType int
 
 const (
-	ReplyTypeStatus ReplyType = iota
-	ReplyTypeError
-	ReplyTypeInteger
-	ReplyTypeBulk
-	ReplyTypeMultiBulks
+	replyTypeStatus replyType = iota
+	replyTypeError
+	replyTypeInteger
+	replyTypeBulk
+	replyTypeMultiBulks
 )
 
-var replyTypeDesc = map[ReplyType]string{
-	ReplyTypeStatus:     "StatusReply",
-	ReplyTypeError:      "ErrorReply",
-	ReplyTypeInteger:    "IntegerReply",
-	ReplyTypeBulk:       "BulkReply",
-	ReplyTypeMultiBulks: "MultiBulksReply",
+var replyTypeDesc = map[replyType]string{
+	replyTypeStatus:     "statusReply",
+	replyTypeError:      "errorReply",
+	replyTypeInteger:    "integerReply",
+	replyTypeBulk:       "bulkReply",
+	replyTypeMultiBulks: "multiBulksReply",
 }
 
-func StatusReply(status string) (r *Reply) {
-	r = &Reply{}
-	r.Type = ReplyTypeStatus
-	r.Value = status
+func statusReply(status string) (r *reply) {
+	r = &reply{}
+	r.rType = replyTypeStatus
+	r.value = status
 	return
 }
 
-func ErrorReply(err error) (r *Reply) {
-	r = &Reply{}
-	r.Type = ReplyTypeError
+func errorReply(err error) (r *reply) {
+	r = &reply{}
+	r.rType = replyTypeError
 	if err != nil {
-		r.Value = err.Error()
+		r.value = err.Error()
 	}
 	return
 }
 
-func IntegerReply(i int) (r *Reply) {
-	r = &Reply{}
-	r.Type = ReplyTypeInteger
-	r.Value = i
+func integerReply(i int) (r *reply) {
+	r = &reply{}
+	r.rType = replyTypeInteger
+	r.value = i
 	return
 }
 
-func BulkReply(bulk interface{}) (r *Reply) {
-	r = &Reply{}
-	r.Type = ReplyTypeBulk
-	r.Value = bulk
+func bulkReply(bulk interface{}) (r *reply) {
+	r = &reply{}
+	r.rType = replyTypeBulk
+	r.value = bulk
 	return
 }
 
-func MultiBulksReply(bulks []interface{}) (r *Reply) {
-	r = &Reply{}
-	r.Type = ReplyTypeMultiBulks
-	r.Value = bulks
+func multiBulksReply(bulks []interface{}) (r *reply) {
+	r = &reply{}
+	r.rType = replyTypeMultiBulks
+	r.value = bulks
 	return
 }
 
-func (r *Reply) String() string {
+func (r *reply) String() string {
 	buf := bytes.Buffer{}
 	buf.WriteString("<")
-	buf.WriteString(replyTypeDesc[r.Type])
+	buf.WriteString(replyTypeDesc[r.rType])
 	buf.WriteString(":")
-	switch r.Value.(type) {
+	switch r.value.(type) {
 	case []byte:
-		buf.WriteString(string(r.Value.([]byte)))
+		buf.WriteString(string(r.value.([]byte)))
 	default:
-		buf.WriteString(fmt.Sprint(r.Value))
+		buf.WriteString(fmt.Sprint(r.value))
 	}
 	buf.WriteString(">")
 	return buf.String()

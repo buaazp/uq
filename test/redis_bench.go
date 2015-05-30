@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"time"
 
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 	"github.com/garyburd/redigo/redis"
 )
 
@@ -32,7 +32,7 @@ func init() {
 }
 
 func initQueue() error {
-	addr := Addrcat(host, port)
+	addr := utils.Addrcat(host, port)
 	conn, err := redis.DialTimeout("tcp", addr, 0, 1*time.Second, 1*time.Second)
 	if err != nil {
 		log.Printf("redis conn error: %s", err)
@@ -57,7 +57,7 @@ func initQueue() error {
 
 func setTestSingle(ch chan bool, cn, n int) error {
 	var err error
-	addr := Addrcat(host, port)
+	addr := utils.Addrcat(host, port)
 	conn, err := redis.DialTimeout("tcp", addr, 0, 1*time.Second, 1*time.Second)
 	if err != nil {
 		log.Printf("redis conn error: %s", err)
@@ -96,7 +96,7 @@ func setTest(c, n int) {
 
 func msetTestSingle(ch chan bool, cn, n int) error {
 	var err error
-	addr := Addrcat(host, port)
+	addr := utils.Addrcat(host, port)
 	conn, err := redis.DialTimeout("tcp", addr, 0, 1*time.Second, 1*time.Second)
 	if err != nil {
 		log.Printf("redis conn error: %s", err)
@@ -140,7 +140,7 @@ func msetTest(c, n int) {
 }
 
 func getTestSingle(ch chan bool, cn, n int) error {
-	addr := Addrcat(host, port)
+	addr := utils.Addrcat(host, port)
 	conn, err := redis.DialTimeout("tcp", addr, 0, 1*time.Second, 1*time.Second)
 	if err != nil {
 		log.Printf("redis conn error: %s", err)

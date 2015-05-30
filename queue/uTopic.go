@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
 func init() {
@@ -37,12 +37,12 @@ type topicStore struct {
 }
 
 func (t *topic) getData(id uint64) ([]byte, error) {
-	key := Acatui(t.name, ":", id)
+	key := utils.Acatui(t.name, ":", id)
 	return t.q.getData(key)
 }
 
 func (t *topic) setData(id uint64, data []byte) error {
-	key := Acatui(t.name, ":", id)
+	key := utils.Acatui(t.name, ":", id)
 	return t.q.setData(key, data)
 }
 
@@ -115,8 +115,8 @@ func (t *topic) exportTopic() error {
 	enc := gob.NewEncoder(buffer)
 	err := enc.Encode(topicStoreValue)
 	if err != nil {
-		return NewError(
-			ErrInternalError,
+		return utils.NewError(
+			utils.ErrInternalError,
 			err.Error(),
 		)
 	}
@@ -162,15 +162,15 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	// log.Printf("topic[%s] loading inflights: %v", t.name, lineStoreValue.Inflights)
 	l := new(line)
 	l.name = lineName
-	l.recycleKey = t.name + "/" + lineName + KeyLineRecycle
+	l.recycleKey = t.name + "/" + lineName + keyLineRecycle
 	lineRecycleData, err := t.q.getData(l.recycleKey)
 	if err != nil {
 		return nil, err
 	}
 	lineRecycle, err := time.ParseDuration(string(lineRecycleData))
 	if err != nil {
-		return nil, NewError(
-			ErrInternalError,
+		return nil, utils.NewError(
+			utils.ErrInternalError,
 			err.Error(),
 		)
 	}
@@ -183,7 +183,7 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 	}
 	l.imap = imap
 	inflight := list.New()
-	for index, _ := range lineStoreValue.Inflights {
+	for index := range lineStoreValue.Inflights {
 		msg := &lineStoreValue.Inflights[index]
 		inflight.PushBack(msg)
 		imap[msg.Tid] = true
@@ -223,7 +223,7 @@ func (t *topic) clean() (quit bool) {
 	defer t.headLock.Unlock()
 
 	// starting := t.head
-	endTime := time.Now().Add(BgCleanTimeout)
+	endTime := time.Now().Add(bgCleanTimeout)
 	// log.Printf("topic[%s] begin to clean at %d", t.name, starting)
 
 	// defer func() {
@@ -248,7 +248,7 @@ func (t *topic) clean() (quit bool) {
 			return
 		}
 
-		key := Acatui(t.name, ":", t.head)
+		key := utils.Acatui(t.name, ":", t.head)
 		err := t.q.delData(key)
 		if err != nil {
 			log.Printf("topic[%s] del %s error; %s", t.name, key, err)
@@ -271,8 +271,8 @@ func (t *topic) backgroundClean() {
 	defer t.wg.Done()
 
 	bgQuit := false
-	backupTick := time.NewTicker(BgBackupInterval)
-	cleanTick := time.NewTicker(BgCleanInterval)
+	backupTick := time.NewTicker(bgBackupInterval)
+	cleanTick := time.NewTicker(bgCleanInterval)
 	for !bgQuit {
 		select {
 		case <-backupTick.C:
@@ -307,7 +307,7 @@ func (t *topic) newLine(name string, recycle time.Duration) (*line, error) {
 	l.name = name
 	l.head = t.head
 	l.recycle = recycle
-	l.recycleKey = t.name + "/" + name + KeyLineRecycle
+	l.recycleKey = t.name + "/" + name + keyLineRecycle
 	l.inflight = inflight
 	l.ihead = t.head
 	l.imap = imap
@@ -330,8 +330,8 @@ func (t *topic) createLine(name string, recycle time.Duration, fromEtcd bool) er
 	defer t.linesLock.Unlock()
 	_, ok := t.lines[name]
 	if ok {
-		return NewError(
-			ErrLineExisted,
+		return utils.NewError(
+			utils.ErrLineExisted,
 			`topic createLine`,
 		)
 	}
@@ -363,7 +363,7 @@ func (t *topic) push(data []byte) error {
 	t.tailLock.Lock()
 	defer t.tailLock.Unlock()
 
-	key := Acatui(t.name, ":", t.tail)
+	key := utils.Acatui(t.name, ":", t.tail)
 	err := t.q.setData(key, data)
 	if err != nil {
 		return err
@@ -386,7 +386,7 @@ func (t *topic) mPush(datas [][]byte) error {
 
 	oldTail := t.tail
 	for _, data := range datas {
-		key := Acatui(t.name, ":", t.tail)
+		key := utils.Acatui(t.name, ":", t.tail)
 		err := t.q.setData(key, data)
 		if err != nil {
 			t.tail = oldTail
@@ -411,8 +411,8 @@ func (t *topic) pop(name string) (uint64, []byte, error) {
 	t.linesLock.RUnlock()
 	if !ok {
 		// log.Printf("topic[%s] line[%s] not existed.", t.name, name)
-		return 0, nil, NewError(
-			ErrLineNotExisted,
+		return 0, nil, utils.NewError(
+			utils.ErrLineNotExisted,
 			`topic pop`,
 		)
 	}
@@ -426,8 +426,8 @@ func (t *topic) mPop(name string, n int) ([]uint64, [][]byte, error) {
 	t.linesLock.RUnlock()
 	if !ok {
 		// log.Printf("topic[%s] line[%s] not existed.", t.name, name)
-		return nil, nil, NewError(
-			ErrLineNotExisted,
+		return nil, nil, utils.NewError(
+			utils.ErrLineNotExisted,
 			`topic mPop`,
 		)
 	}
@@ -441,8 +441,8 @@ func (t *topic) confirm(name string, id uint64) error {
 	t.linesLock.RUnlock()
 	if !ok {
 		// log.Printf("topic[%s] line[%s] not existed.", t.name, name)
-		return NewError(
-			ErrLineNotExisted,
+		return utils.NewError(
+			utils.ErrLineNotExisted,
 			`topic confirm`,
 		)
 	}
@@ -450,14 +450,14 @@ func (t *topic) confirm(name string, id uint64) error {
 	return l.confirm(id)
 }
 
-func (t *topic) statLine(name string) (*QueueStat, error) {
+func (t *topic) statLine(name string) (*Stat, error) {
 	t.linesLock.RLock()
 	l, ok := t.lines[name]
 	t.linesLock.RUnlock()
 	if !ok {
 		// log.Printf("topic[%s] line[%s] not existed.", t.name, name)
-		return nil, NewError(
-			ErrLineNotExisted,
+		return nil, utils.NewError(
+			utils.ErrLineNotExisted,
 			`topic statLine`,
 		)
 	}
@@ -466,8 +466,8 @@ func (t *topic) statLine(name string) (*QueueStat, error) {
 	return qs, nil
 }
 
-func (t *topic) stat() *QueueStat {
-	qs := new(QueueStat)
+func (t *topic) stat() *Stat {
+	qs := new(Stat)
 	qs.Name = t.name
 	qs.Type = "topic"
 
@@ -481,7 +481,7 @@ func (t *topic) stat() *QueueStat {
 
 	t.linesLock.RLock()
 	defer t.linesLock.RUnlock()
-	qs.Lines = make([]*QueueStat, 0)
+	qs.Lines = make([]*Stat, 0)
 	for _, l := range t.lines {
 		ls := l.stat()
 		qs.Lines = append(qs.Lines, ls)
@@ -496,8 +496,8 @@ func (t *topic) emptyLine(name string) error {
 	t.linesLock.RUnlock()
 	if !ok {
 		// log.Printf("topic[%s] line[%s] not existed.", t.name, name)
-		return NewError(
-			ErrLineNotExisted,
+		return utils.NewError(
+			utils.ErrLineNotExisted,
 			`topic emptyLine`,
 		)
 	}
@@ -542,8 +542,8 @@ func (t *topic) removeLine(name string, fromEtcd bool) error {
 	l, ok := t.lines[name]
 	if !ok {
 		// log.Printf("topic[%s] line[%s] not existed.", t.name, name)
-		return NewError(
-			ErrLineNotExisted,
+		return utils.NewError(
+			utils.ErrLineNotExisted,
 			`topic statLine`,
 		)
 	}
@@ -580,7 +580,7 @@ func (t *topic) removeLines() error {
 
 func (t *topic) removeMsgData() error {
 	for i := t.head; i < t.tail; i++ {
-		key := Acatui(t.name, ":", i)
+		key := utils.Acatui(t.name, ":", i)
 		err := t.q.delData(key)
 		if err != nil {
 			log.Printf("topic[%s] del data[%s] error; %s", t.name, key, err)

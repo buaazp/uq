@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// allowMethod verifies that the given method is one of the allowed methods,
+// AllowMethod verifies that the given method is one of the allowed methods,
 // and if not, it writes an error to w.  A boolean is returned indicating
 // whether or not the method is allowed.
 func AllowMethod(w http.ResponseWriter, m string, ms ...string) bool {

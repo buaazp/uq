@@ -11,7 +11,7 @@ import (
 
 	"github.com/buaazp/uq/queue"
 	"github.com/buaazp/uq/store"
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
 var (
@@ -50,7 +50,7 @@ func main() {
 	key := *topic + "/x"
 	err = messageQueue.Create(key, "")
 	if err != nil {
-		if e := err.(*Error); e.ErrorCode != ErrLineExisted {
+		if e := err.(*utils.Error); e.ErrorCode != utils.ErrLineExisted {
 			fmt.Printf("line create error: %s\n", err)
 			return
 		}

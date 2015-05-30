@@ -142,7 +142,7 @@ func main() {
 
 	var entrance entry.Entrance
 	if protocol == "http" {
-		entrance, err = entry.NewHttpEntry(host, port, messageQueue)
+		entrance, err = entry.NewHTTPEntry(host, port, messageQueue)
 	} else if protocol == "mc" {
 		entrance, err = entry.NewMcEntry(host, port, messageQueue)
 	} else if protocol == "redis" {
@@ -176,8 +176,8 @@ func main() {
 		}
 	}(entryFailed)
 
-	var adminServer admin.AdminServer
-	adminServer, err = admin.NewAdminServer(host, adminPort, messageQueue)
+	var adminServer admin.Administrator
+	adminServer, err = admin.NewUnitedAdmin(host, adminPort, messageQueue)
 	if err != nil {
 		fmt.Printf("admin init error: %s\n", err)
 		entrance.Stop()

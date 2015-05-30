@@ -6,14 +6,14 @@ import (
 )
 
 var (
-	BadCommandError    = errors.New("bad command")
-	WrongArgumentCount = errors.New("wrong argument count")
-	WrongCommandKey    = errors.New("wrong command key")
+	errBadCommand         = errors.New("bad command")
+	errWrongArgumentCount = errors.New("wrong argument count")
+	errWrongCommandKey    = errors.New("wrong command key")
 )
 
 const (
-	RI_MinCount = iota
-	RI_MaxCount // -1 for undefined
+	riMinCount = iota
+	riMaxCount // -1 for undefined
 )
 
 var cmdrules = map[string][]interface{}{
@@ -38,12 +38,12 @@ var cmdrules = map[string][]interface{}{
 	"QINFO":  []interface{}{2, 2},
 }
 
-func verifyCommand(cmd *Command) error {
-	if cmd == nil || cmd.Len() == 0 {
-		return BadCommandError
+func verifyCommand(cmd *command) error {
+	if cmd == nil || cmd.length() == 0 {
+		return errBadCommand
 	}
 
-	name := cmd.Name()
+	name := cmd.name()
 	rule, exist := cmdrules[name]
 	if !exist {
 		return nil
@@ -51,21 +51,21 @@ func verifyCommand(cmd *Command) error {
 
 	for i, count := 0, len(rule); i < count; i++ {
 		switch i {
-		case RI_MinCount:
-			if val := rule[i].(int); val != -1 && cmd.Len() < val {
-				return WrongArgumentCount
+		case riMinCount:
+			if val := rule[i].(int); val != -1 && cmd.length() < val {
+				return errWrongArgumentCount
 			}
-		case RI_MaxCount:
-			if val := rule[i].(int); val != -1 && cmd.Len() > val {
-				return WrongArgumentCount
+		case riMaxCount:
+			if val := rule[i].(int); val != -1 && cmd.length() > val {
+				return errWrongArgumentCount
 			}
 		}
 	}
 
-	if cmd.Len() > 1 {
-		key := cmd.StringAtIndex(1)
+	if cmd.length() > 1 {
+		key := cmd.stringAtIndex(1)
 		if strings.ContainsAny(key, "#[] ") {
-			return WrongCommandKey
+			return errWrongCommandKey
 		}
 	}
 	return nil

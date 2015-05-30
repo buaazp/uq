@@ -14,7 +14,7 @@ func TestError(t *testing.T) {
 		)
 		So(err.statusCode(), ShouldEqual, 500)
 		So(err.Error(), ShouldEqual, "500 Internal Error (This is a test error)")
-		So(err.toJsonString(), ShouldEqual,
+		So(err.toJSONString(), ShouldEqual,
 			`{"errorCode":500,"message":"Internal Error","cause":"This is a test error"}`,
 		)
 	})

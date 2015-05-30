@@ -22,7 +22,7 @@ func init() {
 	client = new(http.Client)
 }
 
-func TestNewHttpEntry(t *testing.T) {
+func TestNewHTTPEntry(t *testing.T) {
 	Convey("Test New HTTP Entry", t, func() {
 		var err error
 		storage, err = store.NewMemStore()
@@ -32,7 +32,7 @@ func TestNewHttpEntry(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(messageQueue, ShouldNotBeNil)
 
-		entrance, err = NewHttpEntry("0.0.0.0", 8801, messageQueue)
+		entrance, err = NewHTTPEntry("0.0.0.0", 8801, messageQueue)
 		So(err, ShouldBeNil)
 		So(entrance, ShouldNotBeNil)
 
@@ -128,7 +128,7 @@ func TestHttpConfirm(t *testing.T) {
 	})
 }
 
-func TestCloseHttpEntry(t *testing.T) {
+func TestCloseHTTPEntry(t *testing.T) {
 	Convey("Test Close Http Entry", t, func() {
 		entrance.Stop()
 		messageQueue = nil

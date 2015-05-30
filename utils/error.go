@@ -7,15 +7,24 @@ import (
 )
 
 const (
-	ErrNone            = 100
+	// ErrNone is none error
+	ErrNone = 100
+	// ErrTopicNotExisted is topic not existed error
 	ErrTopicNotExisted = 101
-	ErrLineNotExisted  = 102
-	ErrNotDelivered    = 103
-	ErrBadKey          = 104
-	ErrTopicExisted    = 105
-	ErrLineExisted     = 106
-	ErrBadRequest      = 400
-	ErrInternalError   = 500
+	// ErrLineNotExisted is line not existed error
+	ErrLineNotExisted = 102
+	// ErrNotDelivered is the message not delivered error
+	ErrNotDelivered = 103
+	// ErrBadKey is key bad error
+	ErrBadKey = 104
+	// ErrTopicExisted is topic has been existed error
+	ErrTopicExisted = 105
+	// ErrLineExisted is line has been existed error
+	ErrLineExisted = 106
+	// ErrBadRequest is bad request error
+	ErrBadRequest = 400
+	// ErrInternalError is internal error
+	ErrInternalError = 500
 )
 
 var errorMap = map[int]string{
@@ -43,12 +52,14 @@ var errorStatus = map[int]int{
 	ErrInternalError:   http.StatusInternalServerError,
 }
 
+// Error is the error type in uq
 type Error struct {
 	ErrorCode int    `json:"errorCode"`
 	Message   string `json:"message"`
 	Cause     string `json:"cause,omitempty"`
 }
 
+// NewError returns a uq error
 func NewError(errorCode int, cause string) *Error {
 	return &Error{
 		ErrorCode: errorCode,
@@ -70,13 +81,14 @@ func (e Error) statusCode() int {
 	return status
 }
 
-func (e Error) toJsonString() string {
+func (e Error) toJSONString() string {
 	b, _ := json.Marshal(e)
 	return string(b)
 }
 
+// WriteTo writes the error to a http response
 func (e Error) WriteTo(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(e.statusCode())
-	fmt.Fprintln(w, e.toJsonString())
+	fmt.Fprintln(w, e.toJSONString())
 }

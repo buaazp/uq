@@ -28,11 +28,13 @@ import (
 // 	return rst
 // }
 
+// Acatui implements Adress cat uint64
 func Acatui(str, b string, n uint64) string {
 	ns := strconv.FormatUint(n, 10)
 	return str + b + ns
 }
 
+// Fmt returns the fmt version of cat
 func Fmt(str, b string, n uint64) string {
 	return fmt.Sprintf("%s%s%d", str, b, n)
 }

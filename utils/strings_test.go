@@ -28,7 +28,7 @@ func TestAcatui(t *testing.T) {
 func TestAcati(t *testing.T) {
 	Convey("Test Acati", t, func() {
 		key := "foo/x"
-		var i int = 100
+		var i = 100
 		str := Acati(key, "/", i)
 		So(str, ShouldEqual, "foo/x/100")
 	})
@@ -37,7 +37,7 @@ func TestAcati(t *testing.T) {
 func TestAddrcat(t *testing.T) {
 	Convey("Test Addrcat", t, func() {
 		addr := "localhost"
-		var port int = 9689
+		var port = 9689
 		str := Addrcat(addr, port)
 		So(str, ShouldEqual, "localhost:9689")
 	})

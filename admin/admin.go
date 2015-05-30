@@ -1,6 +1,7 @@
 package admin
 
-type AdminServer interface {
+// Administrator is the admin interface of uq
+type Administrator interface {
 	ListenAndServe() error
 	Stop()
 }

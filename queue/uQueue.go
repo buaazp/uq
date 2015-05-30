@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/buaazp/uq/store"
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 	"github.com/coreos/go-etcd/etcd"
 )
 
@@ -21,19 +21,20 @@ func init() {
 }
 
 const (
-	StorageKeyWord   string        = "UnitedQueueKey"
-	BgBackupInterval time.Duration = 10 * time.Second
-	BgCleanInterval  time.Duration = 20 * time.Second
-	BgCleanTimeout   time.Duration = 5 * time.Second
-	KeyTopicStore    string        = ":store"
-	KeyTopicHead     string        = ":head"
-	KeyTopicTail     string        = ":tail"
-	KeyLineStore     string        = ":store"
-	KeyLineHead      string        = ":head"
-	KeyLineRecycle   string        = ":recycle"
-	KeyLineInflight  string        = ":inflight"
+	storageKeyWord   string        = "UnitedQueueKey"
+	bgBackupInterval time.Duration = 10 * time.Second
+	bgCleanInterval  time.Duration = 20 * time.Second
+	bgCleanTimeout   time.Duration = 5 * time.Second
+	keyTopicStore    string        = ":store"
+	keyTopicHead     string        = ":head"
+	keyTopicTail     string        = ":tail"
+	keyLineStore     string        = ":store"
+	keyLineHead      string        = ":head"
+	keyLineRecycle   string        = ":recycle"
+	keyLineInflight  string        = ":inflight"
 )
 
+// UnitedQueue is a implemention of message queue in uq
 type UnitedQueue struct {
 	topics     map[string]*topic
 	topicsLock sync.RWMutex
@@ -50,6 +51,7 @@ type unitedQueueStore struct {
 	Topics []string
 }
 
+// NewUnitedQueue returns a new UnitedQueue
 func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []string, etcdKey string) (*UnitedQueue, error) {
 	topics := make(map[string]*topic)
 	etcdStop := make(chan bool)
@@ -59,7 +61,7 @@ func NewUnitedQueue(storage store.Storage, ip string, port int, etcdServers []st
 	uq.etcdStop = etcdStop
 
 	if len(etcdServers) > 0 {
-		selfAddr := Addrcat(ip, port)
+		selfAddr := utils.Addrcat(ip, port)
 		uq.selfAddr = selfAddr
 		etcdClient := etcd.NewClient(etcdServers)
 		uq.etcdClient = etcdClient
@@ -79,8 +81,8 @@ func (u *UnitedQueue) setData(key string, data []byte) error {
 	err := u.storage.Set(key, data)
 	if err != nil {
 		// log.Printf("key[%s] set data error: %s", key, err)
-		return NewError(
-			ErrInternalError,
+		return utils.NewError(
+			utils.ErrInternalError,
 			err.Error(),
 		)
 	}
@@ -91,8 +93,8 @@ func (u *UnitedQueue) getData(key string) ([]byte, error) {
 	data, err := u.storage.Get(key)
 	if err != nil {
 		// log.Printf("key[%s] get data error: %s", key, err)
-		return nil, NewError(
-			ErrInternalError,
+		return nil, utils.NewError(
+			utils.ErrInternalError,
 			err.Error(),
 		)
 	}
@@ -103,8 +105,8 @@ func (u *UnitedQueue) delData(key string) error {
 	err := u.storage.Del(key)
 	if err != nil {
 		// log.Printf("key[%s] del data error: %s", key, err)
-		return NewError(
-			ErrInternalError,
+		return utils.NewError(
+			utils.ErrInternalError,
 			err.Error(),
 		)
 	}
@@ -137,7 +139,7 @@ func (u *UnitedQueue) exportTopics() error {
 func (u *UnitedQueue) genQueueStore() *unitedQueueStore {
 	topics := make([]string, len(u.topics))
 	i := 0
-	for topicName, _ := range u.topics {
+	for topicName := range u.topics {
 		topics[i] = topicName
 		i++
 	}
@@ -159,7 +161,7 @@ func (u *UnitedQueue) exportQueue() error {
 		return err
 	}
 
-	err = u.setData(StorageKeyWord, buffer.Bytes())
+	err = u.setData(storageKeyWord, buffer.Bytes())
 	if err != nil {
 		return err
 	}
@@ -174,13 +176,13 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	t.q = u
 	t.quit = make(chan bool)
 
-	t.headKey = topicName + KeyTopicHead
+	t.headKey = topicName + keyTopicHead
 	topicHeadData, err := u.getData(t.headKey)
 	if err != nil {
 		return nil, err
 	}
 	t.head = binary.LittleEndian.Uint64(topicHeadData)
-	t.tailKey = topicName + KeyTopicTail
+	t.tailKey = topicName + keyTopicTail
 	topicTailData, err := u.getData(t.tailKey)
 	if err != nil {
 		return nil, err
@@ -219,7 +221,7 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 }
 
 func (u *UnitedQueue) loadQueue() error {
-	unitedQueueStoreData, err := u.getData(StorageKeyWord)
+	unitedQueueStoreData, err := u.getData(storageKeyWord)
 	if err != nil {
 		// log.Printf("storage not existed: %s", err)
 		return nil
@@ -263,9 +265,9 @@ func (u *UnitedQueue) newTopic(name string) (*topic, error) {
 	t.name = name
 	t.lines = lines
 	t.head = 0
-	t.headKey = name + KeyTopicHead
+	t.headKey = name + keyTopicHead
 	t.tail = 0
-	t.tailKey = name + KeyTopicTail
+	t.tailKey = name + keyTopicTail
 	t.q = u
 	t.quit = make(chan bool)
 
@@ -287,8 +289,8 @@ func (u *UnitedQueue) createTopic(name string, fromEtcd bool) error {
 	_, ok := u.topics[name]
 	u.topicsLock.RUnlock()
 	if ok {
-		return NewError(
-			ErrTopicExisted,
+		return utils.NewError(
+			utils.ErrTopicExisted,
 			`queue createTopic`,
 		)
 	}
@@ -324,16 +326,16 @@ func (u *UnitedQueue) create(key, rec string, fromEtcd bool) error {
 	var err error
 	parts := strings.Split(key, "/")
 	if len(parts) < 1 || len(parts) > 2 {
-		return NewError(
-			ErrBadKey,
-			`create key parts error: `+ItoaQuick(len(parts)),
+		return utils.NewError(
+			utils.ErrBadKey,
+			`create key parts error: `+utils.ItoaQuick(len(parts)),
 		)
 	}
 
 	topicName = parts[0]
 	if topicName == "" {
-		return NewError(
-			ErrBadKey,
+		return utils.NewError(
+			utils.ErrBadKey,
 			`create topic is nil`,
 		)
 	}
@@ -344,8 +346,8 @@ func (u *UnitedQueue) create(key, rec string, fromEtcd bool) error {
 		if rec != "" {
 			recycle, err = time.ParseDuration(rec)
 			if err != nil {
-				return NewError(
-					ErrBadRequest,
+				return utils.NewError(
+					utils.ErrBadRequest,
 					err.Error(),
 				)
 			}
@@ -355,8 +357,8 @@ func (u *UnitedQueue) create(key, rec string, fromEtcd bool) error {
 		t, ok := u.topics[topicName]
 		u.topicsLock.RUnlock()
 		if !ok {
-			return NewError(
-				ErrTopicNotExisted,
+			return utils.NewError(
+				utils.ErrTopicNotExisted,
 				`queue create`,
 			)
 		}
@@ -377,17 +379,19 @@ func (u *UnitedQueue) create(key, rec string, fromEtcd bool) error {
 	return err
 }
 
+// Create implements Create interface
 func (u *UnitedQueue) Create(key, rec string) error {
 	return u.create(key, rec, false)
 }
 
+// Push implements Push interface
 func (u *UnitedQueue) Push(key string, data []byte) error {
 	key = strings.TrimPrefix(key, "/")
 	key = strings.TrimSuffix(key, "/")
 
 	if len(data) <= 0 {
-		return NewError(
-			ErrBadRequest,
+		return utils.NewError(
+			utils.ErrBadRequest,
 			`message has no content`,
 		)
 	}
@@ -396,8 +400,8 @@ func (u *UnitedQueue) Push(key string, data []byte) error {
 	t, ok := u.topics[key]
 	u.topicsLock.RUnlock()
 	if !ok {
-		return NewError(
-			ErrTopicNotExisted,
+		return utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue push`,
 		)
 	}
@@ -405,6 +409,7 @@ func (u *UnitedQueue) Push(key string, data []byte) error {
 	return t.push(data)
 }
 
+// MultiPush implements MultiPush interface
 func (u *UnitedQueue) MultiPush(key string, datas [][]byte) error {
 	key = strings.TrimPrefix(key, "/")
 	key = strings.TrimSuffix(key, "/")
@@ -412,8 +417,8 @@ func (u *UnitedQueue) MultiPush(key string, datas [][]byte) error {
 	for i, data := range datas {
 		if len(data) <= 0 {
 			cause := "message " + strconv.Itoa(i) + " has no content"
-			return NewError(
-				ErrBadRequest,
+			return utils.NewError(
+				utils.ErrBadRequest,
 				cause,
 			)
 		}
@@ -423,8 +428,8 @@ func (u *UnitedQueue) MultiPush(key string, datas [][]byte) error {
 	t, ok := u.topics[key]
 	u.topicsLock.RUnlock()
 	if !ok {
-		return NewError(
-			ErrTopicNotExisted,
+		return utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue multiPush`,
 		)
 	}
@@ -432,15 +437,16 @@ func (u *UnitedQueue) MultiPush(key string, datas [][]byte) error {
 	return t.mPush(datas)
 }
 
+// Pop implements Pop interface
 func (u *UnitedQueue) Pop(key string) (string, []byte, error) {
 	key = strings.TrimPrefix(key, "/")
 	key = strings.TrimSuffix(key, "/")
 
 	parts := strings.Split(key, "/")
 	if len(parts) != 2 {
-		return "", nil, NewError(
-			ErrBadKey,
-			`pop key parts error: `+ItoaQuick(len(parts)),
+		return "", nil, utils.NewError(
+			utils.ErrBadKey,
+			`pop key parts error: `+utils.ItoaQuick(len(parts)),
 		)
 	}
 
@@ -452,8 +458,8 @@ func (u *UnitedQueue) Pop(key string) (string, []byte, error) {
 	u.topicsLock.RUnlock()
 	if !ok {
 		// log.Printf("topic[%s] not existed.", tName)
-		return "", nil, NewError(
-			ErrTopicNotExisted,
+		return "", nil, utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue pop`,
 		)
 	}
@@ -463,18 +469,19 @@ func (u *UnitedQueue) Pop(key string) (string, []byte, error) {
 		return "", nil, err
 	}
 
-	return Acatui(key, "/", id), data, nil
+	return utils.Acatui(key, "/", id), data, nil
 }
 
+// MultiPop implements MultiPop interface
 func (u *UnitedQueue) MultiPop(key string, n int) ([]string, [][]byte, error) {
 	key = strings.TrimPrefix(key, "/")
 	key = strings.TrimSuffix(key, "/")
 
 	parts := strings.Split(key, "/")
 	if len(parts) != 2 {
-		return nil, nil, NewError(
-			ErrBadKey,
-			`mPop key parts error: `+ItoaQuick(len(parts)),
+		return nil, nil, utils.NewError(
+			utils.ErrBadKey,
+			`mPop key parts error: `+utils.ItoaQuick(len(parts)),
 		)
 	}
 
@@ -486,8 +493,8 @@ func (u *UnitedQueue) MultiPop(key string, n int) ([]string, [][]byte, error) {
 	u.topicsLock.RUnlock()
 	if !ok {
 		// log.Printf("topic[%s] not existed.", tName)
-		return nil, nil, NewError(
-			ErrTopicNotExisted,
+		return nil, nil, utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue multiPop`,
 		)
 	}
@@ -499,34 +506,31 @@ func (u *UnitedQueue) MultiPop(key string, n int) ([]string, [][]byte, error) {
 
 	keys := make([]string, len(ids))
 	for i, id := range ids {
-		keys[i] = Acatui(key, "/", id)
+		keys[i] = utils.Acatui(key, "/", id)
 	}
 	return keys, datas, nil
 }
 
+// Confirm implements Confirm interface
 func (u *UnitedQueue) Confirm(key string) error {
 	key = strings.TrimPrefix(key, "/")
 	key = strings.TrimSuffix(key, "/")
 
-	var topicName, lineName string
-	var id uint64
-	var err error
 	parts := strings.Split(key, "/")
 	if len(parts) != 3 {
-		return NewError(
-			ErrBadKey,
-			`confirm key parts error: `+ItoaQuick(len(parts)),
+		return utils.NewError(
+			utils.ErrBadKey,
+			`confirm key parts error: `+utils.ItoaQuick(len(parts)),
 		)
-	} else {
-		topicName = parts[0]
-		lineName = parts[1]
-		id, err = strconv.ParseUint(parts[2], 10, 0)
-		if err != nil {
-			return NewError(
-				ErrBadKey,
-				`confirm key parse id error: `+err.Error(),
-			)
-		}
+	}
+	topicName := parts[0]
+	lineName := parts[1]
+	id, err := strconv.ParseUint(parts[2], 10, 0)
+	if err != nil {
+		return utils.NewError(
+			utils.ErrBadKey,
+			`confirm key parse id error: `+err.Error(),
+		)
 	}
 
 	u.topicsLock.RLock()
@@ -534,8 +538,8 @@ func (u *UnitedQueue) Confirm(key string) error {
 	u.topicsLock.RUnlock()
 	if !ok {
 		// log.Printf("topic[%s] not existed.", topicName)
-		return NewError(
-			ErrTopicNotExisted,
+		return utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue confirm`,
 		)
 	}
@@ -543,6 +547,7 @@ func (u *UnitedQueue) Confirm(key string) error {
 	return t.confirm(lineName, id)
 }
 
+// MultiConfirm implements MultiConfirm interface
 func (u *UnitedQueue) MultiConfirm(keys []string) []error {
 	errs := make([]error, len(keys))
 	for i, key := range keys {
@@ -551,23 +556,24 @@ func (u *UnitedQueue) MultiConfirm(keys []string) []error {
 	return errs
 }
 
-func (u *UnitedQueue) Stat(key string) (*QueueStat, error) {
+// Stat implements Stat interface
+func (u *UnitedQueue) Stat(key string) (*Stat, error) {
 	key = strings.TrimPrefix(key, "/")
 	key = strings.TrimSuffix(key, "/")
 
 	var topicName, lineName string
 	parts := strings.Split(key, "/")
 	if len(parts) < 1 || len(parts) > 2 {
-		return nil, NewError(
-			ErrBadKey,
-			`empty key parts error: `+ItoaQuick(len(parts)),
+		return nil, utils.NewError(
+			utils.ErrBadKey,
+			`empty key parts error: `+utils.ItoaQuick(len(parts)),
 		)
 	}
 
 	topicName = parts[0]
 	if topicName == "" {
-		return nil, NewError(
-			ErrBadKey,
+		return nil, utils.NewError(
+			utils.ErrBadKey,
 			`stat topic is nil`,
 		)
 	}
@@ -576,8 +582,8 @@ func (u *UnitedQueue) Stat(key string) (*QueueStat, error) {
 	t, ok := u.topics[topicName]
 	u.topicsLock.RUnlock()
 	if !ok {
-		return nil, NewError(
-			ErrTopicNotExisted,
+		return nil, utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue stat`,
 		)
 	}
@@ -591,6 +597,7 @@ func (u *UnitedQueue) Stat(key string) (*QueueStat, error) {
 	return qs, nil
 }
 
+// Empty implements Empty interface
 func (u *UnitedQueue) Empty(key string) error {
 	key = strings.TrimPrefix(key, "/")
 	key = strings.TrimSuffix(key, "/")
@@ -598,17 +605,17 @@ func (u *UnitedQueue) Empty(key string) error {
 	var topicName, lineName string
 	parts := strings.Split(key, "/")
 	if len(parts) < 1 || len(parts) > 2 {
-		return NewError(
-			ErrBadKey,
-			`empty key parts error: `+ItoaQuick(len(parts)),
+		return utils.NewError(
+			utils.ErrBadKey,
+			`empty key parts error: `+utils.ItoaQuick(len(parts)),
 		)
 	}
 
 	topicName = parts[0]
 
 	if topicName == "" {
-		return NewError(
-			ErrBadKey,
+		return utils.NewError(
+			utils.ErrBadKey,
 			`empty topic is nil`,
 		)
 	}
@@ -617,8 +624,8 @@ func (u *UnitedQueue) Empty(key string) error {
 	t, ok := u.topics[topicName]
 	u.topicsLock.RUnlock()
 	if !ok {
-		return NewError(
-			ErrTopicNotExisted,
+		return utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue empty`,
 		)
 	}
@@ -642,8 +649,8 @@ func (u *UnitedQueue) removeTopic(name string, fromEtcd bool) error {
 
 	t, ok := u.topics[name]
 	if !ok {
-		return NewError(
-			ErrTopicNotExisted,
+		return utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue remove`,
 		)
 	}
@@ -669,16 +676,16 @@ func (u *UnitedQueue) remove(key string, fromEtcd bool) error {
 	var topicName, lineName string
 	parts := strings.Split(key, "/")
 	if len(parts) < 1 || len(parts) > 2 {
-		return NewError(
-			ErrBadKey,
-			`remove key parts error: `+ItoaQuick(len(parts)),
+		return utils.NewError(
+			utils.ErrBadKey,
+			`remove key parts error: `+utils.ItoaQuick(len(parts)),
 		)
 	}
 
 	topicName = parts[0]
 	if topicName == "" {
-		return NewError(
-			ErrBadKey,
+		return utils.NewError(
+			utils.ErrBadKey,
 			`rmove topic is nil`,
 		)
 	}
@@ -691,8 +698,8 @@ func (u *UnitedQueue) remove(key string, fromEtcd bool) error {
 	t, ok := u.topics[topicName]
 	u.topicsLock.RUnlock()
 	if !ok {
-		return NewError(
-			ErrTopicNotExisted,
+		return utils.NewError(
+			utils.ErrTopicNotExisted,
 			`queue remove`,
 		)
 	}
@@ -701,10 +708,12 @@ func (u *UnitedQueue) remove(key string, fromEtcd bool) error {
 	return t.removeLine(lineName, fromEtcd)
 }
 
+// Remove implements Remove interface
 func (u *UnitedQueue) Remove(key string) error {
 	return u.remove(key, false)
 }
 
+// Close implements Close interface
 func (u *UnitedQueue) Close() {
 	log.Printf("uq stoping...")
 	close(u.etcdStop)

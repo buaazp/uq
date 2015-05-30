@@ -6,24 +6,29 @@ import (
 	"time"
 
 	"github.com/buaazp/uq/queue"
-	. "github.com/buaazp/uq/utils"
+	"github.com/buaazp/uq/utils"
 )
 
 const (
-	CR        = '\r'
-	LF        = '\n'
-	CRLF      = "\r\n"
-	C_SESSION = "session"
-	C_ELAPSED = "elapsed"
+	// CR is the \r
+	CR = '\r'
+	// LF is the \n
+	LF = '\n'
+	// CRLF is the \r\n
+	CRLF     = "\r\n"
+	cSession = "session"
+	cElapsed = "elapsed"
 )
 
+// RedisEntry is the redis entrance of uq
 type RedisEntry struct {
 	host         string
 	port         int
-	stopListener *StopListener
+	stopListener *utils.StopListener
 	messageQueue queue.MessageQueue
 }
 
+// NewRedisEntry returns a new RedisEntry
 func NewRedisEntry(host string, port int, messageQueue queue.MessageQueue) (*RedisEntry, error) {
 	rs := new(RedisEntry)
 	rs.host = host
@@ -32,81 +37,81 @@ func NewRedisEntry(host string, port int, messageQueue queue.MessageQueue) (*Red
 	return rs, nil
 }
 
-func (r *RedisEntry) OnUndefined(session *Session, cmd *Command) (reply *Reply) {
-	return ErrorReply(NewError(
-		ErrBadRequest,
+func (r *RedisEntry) onUndefined(ss *session, cmd *command) (rep *reply) {
+	return errorReply(utils.NewError(
+		utils.ErrBadRequest,
 		"command not supported: "+cmd.String(),
 	))
 }
 
-func (r *RedisEntry) commandHandler(session *Session, cmd *Command) (reply *Reply) {
-	cmdName := cmd.Name()
+func (r *RedisEntry) commandHandler(ss *session, cmd *command) (rep *reply) {
+	cmdName := cmd.name()
 
 	if cmdName == "ADD" || cmdName == "QADD" {
-		reply = r.OnQadd(cmd)
+		rep = r.onQadd(cmd)
 	} else if cmdName == "SET" || cmdName == "QPUSH" {
-		reply = r.OnQpush(cmd)
+		rep = r.onQpush(cmd)
 	} else if cmdName == "MSET" || cmdName == "QMPUSH" {
-		reply = r.OnQmpush(cmd)
+		rep = r.onQmpush(cmd)
 	} else if cmdName == "GET" || cmdName == "QPOP" {
-		reply = r.OnQpop(cmd)
+		rep = r.onQpop(cmd)
 	} else if cmdName == "MGET" || cmdName == "QMPOP" {
-		reply = r.OnQmpop(cmd)
+		rep = r.onQmpop(cmd)
 	} else if cmdName == "DEL" || cmdName == "QDEL" {
-		reply = r.OnQdel(cmd)
+		rep = r.onQdel(cmd)
 	} else if cmdName == "MDEL" || cmdName == "QMDEL" {
-		reply = r.OnQmdel(cmd)
+		rep = r.onQmdel(cmd)
 	} else if cmdName == "EMPTY" || cmdName == "QEMPTY" {
-		reply = r.OnQempty(cmd)
+		rep = r.onQempty(cmd)
 	} else if cmdName == "INFO" || cmdName == "QINFO" {
-		reply = r.OnInfo(cmd)
+		rep = r.onInfo(cmd)
 	} else {
-		reply = r.OnUndefined(session, cmd)
+		rep = r.onUndefined(ss, cmd)
 	}
 
 	return
 }
 
-func (r *RedisEntry) Process(session *Session, cmd *Command) (reply *Reply) {
+func (r *RedisEntry) process(ss *session, cmd *command) (rep *reply) {
 	// invoke & time
 	begin := time.Now()
-	cmd.SetAttribute(C_SESSION, session)
+	cmd.setAttribute(cSession, ss)
 
 	// varify command
 	if err := verifyCommand(cmd); err != nil {
-		// log.Printf("[%s] bad command %s\n", session.RemoteAddr(), cmd)
-		return ErrorReply(NewError(
-			ErrBadRequest,
+		// log.Printf("[%s] bad command %s\n", ss.RemoteAddr(), cmd)
+		return errorReply(utils.NewError(
+			utils.ErrBadRequest,
 			err.Error(),
 		))
 	}
 
 	// invoke
-	reply = r.commandHandler(session, cmd)
+	rep = r.commandHandler(ss, cmd)
 
 	elapsed := time.Now().Sub(begin)
-	cmd.SetAttribute(C_ELAPSED, elapsed)
+	cmd.setAttribute(cElapsed, elapsed)
 
 	return
 }
 
-func (r *RedisEntry) handlerConn(session *Session) {
-	var err error
-	// addr := session.RemoteAddr().String()
+func (r *RedisEntry) handlerConn(ss *session) {
+	// addr := ss.RemoteAddr().String()
 	// log.Printf("handleClient: %s", addr)
 
 	for {
-		var cmd *Command
-		cmd, err = session.ReadCommand()
+		// var cmd *command
+		cmd, err := ss.readCommand()
 		// 1) io.EOF
 		// 2) read tcp 127.0.0.1:51863: connection reset by peer
 		if err != nil {
-			// log.Printf("session read command error: %s", err)
+			log.Printf("session read command error: %s", err)
 			break
 		}
-		reply := r.Process(session, cmd)
-		if reply != nil {
-			err = session.WriteReply(reply)
+		log.Printf("cmd: %v", cmd)
+		rep := r.process(ss, cmd)
+		if rep != nil {
+			err = ss.writeReply(rep)
 			if err != nil {
 				break
 			}
@@ -114,21 +119,22 @@ func (r *RedisEntry) handlerConn(session *Session) {
 	}
 
 	// log.Printf("session %s closing...", addr)
-	if err := session.Close(); err != nil {
+	if err := ss.Close(); err != nil {
 		// log.Printf("session %s close error: %s", addr, err)
 	}
 
 	return
 }
 
+// ListenAndServe implements the ListenAndServe interface
 func (r *RedisEntry) ListenAndServe() error {
-	addr := Addrcat(r.host, r.port)
+	addr := utils.Addrcat(r.host, r.port)
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
-	stopListener, err := NewStopListener(l)
+	stopListener, err := utils.NewStopListener(l)
 	if err != nil {
 		return err
 	}
@@ -141,10 +147,11 @@ func (r *RedisEntry) ListenAndServe() error {
 			// log.Printf("Accept failed: %s\n", err)
 			return err
 		}
-		go r.handlerConn(NewSession(conn))
+		go r.handlerConn(newSession(conn))
 	}
 }
 
+// Stop implements the Stop interface
 func (r *RedisEntry) Stop() {
 	log.Printf("redis entry stoping...")
 	r.stopListener.Stop()

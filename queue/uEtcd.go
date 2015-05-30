@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	EtcdUqServerListValue string        = "online"
-	EtcdTTL               uint64        = 60
-	OneSecond             uint64        = uint64(time.Second)
-	EtcdWatchDelay        time.Duration = 3 * time.Second
-	EtcdRegisterDelay     time.Duration = 3 * time.Second
+	etcdUqServerListValue string        = "online"
+	etcdTTL               uint64        = 60
+	oneSecond             uint64        = uint64(time.Second)
+	etcdWatchDelay        time.Duration = 3 * time.Second
+	etcdRegisterDelay     time.Duration = 3 * time.Second
 )
 
 func (u *UnitedQueue) nodeCreate(node *etcd.Node) error {
@@ -104,7 +104,7 @@ func (u *UnitedQueue) scanRun() {
 	stopChan := make(chan bool)
 	succChan := make(chan bool, 1)
 	succChan <- false
-	watchDelay := time.NewTicker(EtcdWatchDelay)
+	watchDelay := time.NewTicker(etcdWatchDelay)
 	quit := false
 	for !quit {
 		select {
@@ -133,7 +133,7 @@ func (u *UnitedQueue) register() error {
 	// log.Printf("etcd register self...")
 
 	key := u.etcdKey + "/servers/" + u.selfAddr
-	_, err := u.etcdClient.Set(key, EtcdUqServerListValue, EtcdTTL)
+	_, err := u.etcdClient.Set(key, etcdUqServerListValue, etcdTTL)
 	if err != nil {
 		return err
 	}
@@ -166,7 +166,7 @@ func (u *UnitedQueue) etcdRun() {
 	// }
 	go u.scanRun()
 
-	registerDelay := time.NewTicker(EtcdRegisterDelay)
+	registerDelay := time.NewTicker(etcdRegisterDelay)
 	select {
 	case <-registerDelay.C:
 		// log.Printf("entry succ. etcdRun first register...")
@@ -176,7 +176,7 @@ func (u *UnitedQueue) etcdRun() {
 		return
 	}
 
-	ticker := time.NewTicker(time.Duration(EtcdTTL * OneSecond))
+	ticker := time.NewTicker(time.Duration(etcdTTL * oneSecond))
 	quit := false
 	for !quit {
 		select {

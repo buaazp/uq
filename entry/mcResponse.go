@@ -5,14 +5,14 @@ import (
 	"io"
 )
 
-type Response struct {
+type response struct {
 	status  string
 	msg     string
 	noreply bool
-	items   map[string]*Item
+	items   map[string]*item
 }
 
-func WriteFull(w io.Writer, buf []byte) error {
+func writeFull(w io.Writer, buf []byte) error {
 	n, e := w.Write(buf)
 	for e != nil && n > 0 {
 		buf = buf[n:]
@@ -21,7 +21,7 @@ func WriteFull(w io.Writer, buf []byte) error {
 	return e
 }
 
-func (resp *Response) Write(w io.Writer) error {
+func (resp *response) Write(w io.Writer) error {
 	if resp.noreply {
 		return nil
 	}
@@ -30,11 +30,11 @@ func (resp *Response) Write(w io.Writer) error {
 	case "VALUE":
 		if resp.items != nil {
 			for key, item := range resp.items {
-				fmt.Fprintf(w, "VALUE %s %d %d\r\n", key, item.Flag, len(item.Body))
-				if e := WriteFull(w, item.Body); e != nil {
+				fmt.Fprintf(w, "VALUE %s %d %d\r\n", key, item.flag, len(item.body))
+				if e := writeFull(w, item.body); e != nil {
 					return e
 				}
-				WriteFull(w, []byte("\r\n"))
+				writeFull(w, []byte("\r\n"))
 			}
 		}
 		io.WriteString(w, "END\r\n")

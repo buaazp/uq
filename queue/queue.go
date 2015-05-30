@@ -1,5 +1,6 @@
 package queue
 
+// MessageQueue is the message queue interface of uq
 type MessageQueue interface {
 	// queue functions
 	Push(key string, data []byte) error
@@ -12,6 +13,6 @@ type MessageQueue interface {
 	Create(key, recycle string) error
 	Empty(key string) error
 	Remove(key string) error
-	Stat(key string) (*QueueStat, error)
+	Stat(key string) (*Stat, error)
 	Close()
 }
