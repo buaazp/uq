@@ -22,7 +22,7 @@ func TestNewLevelStore(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(ldb, ShouldNotBeNil)
 
-		ldb2, err2 := NewLevelStore("/path_not_existed")
+		ldb2, err2 := NewLevelStore("")
 		So(err2, ShouldNotBeNil)
 		So(ldb2, ShouldBeNil)
 	})
