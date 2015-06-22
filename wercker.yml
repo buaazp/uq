@@ -30,6 +30,8 @@ build:
     - script:
         name: go get
         code: |
+          go get -v golang.org/x/tools/cmd/vet
+          go get -v github.com/golang/lint/golint
           go get -d -t -v ./...
 
     # Build the project
@@ -42,6 +44,8 @@ build:
     - script:
         name: go test
         code: |
+          go vet ./...
+          golint ./...
           go test -v ./admin
           go test -v ./entry
           go test -v ./queue
