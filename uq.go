@@ -82,17 +82,18 @@ func main() {
 		fmt.Printf("mkdir %s error: %s\n", dir, err)
 		return
 	}
-	if logFile == "" {
+	if logFile != "" {
 		logFile = path.Join(dir, "uq.log")
-	}
-	logf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		fmt.Printf("log open error: %s\n", err)
-		return
+		logf, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			fmt.Printf("log open error: %s\n", err)
+			return
+		}
+		defer logf.Close()
+		log.SetOutput(logf)
 	}
 	log.SetFlags(log.Lshortfile | log.LstdFlags | log.Lmicroseconds)
 	log.SetPrefix("[uq] ")
-	log.SetOutput(logf)
 
 	fmt.Printf("uq started! 😄\n")
 

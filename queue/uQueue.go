@@ -173,6 +173,7 @@ func (u *UnitedQueue) exportQueue() error {
 func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*topic, error) {
 	t := new(topic)
 	t.name = topicName
+	t.persist = topicStoreValue.Persist
 	t.q = u
 	t.quit = make(chan bool)
 
@@ -259,10 +260,11 @@ func (u *UnitedQueue) loadQueue() error {
 	return nil
 }
 
-func (u *UnitedQueue) newTopic(name string) (*topic, error) {
+func (u *UnitedQueue) newTopic(name string, persist bool) (*topic, error) {
 	lines := make(map[string]*line)
 	t := new(topic)
 	t.name = name
+	t.persist = persist
 	t.lines = lines
 	t.head = 0
 	t.headKey = name + keyTopicHead
@@ -284,7 +286,7 @@ func (u *UnitedQueue) newTopic(name string) (*topic, error) {
 	return t, nil
 }
 
-func (u *UnitedQueue) createTopic(name string, fromEtcd bool) error {
+func (u *UnitedQueue) createTopic(name string, persist, fromEtcd bool) error {
 	u.topicsLock.RLock()
 	_, ok := u.topics[name]
 	u.topicsLock.RUnlock()
@@ -295,7 +297,7 @@ func (u *UnitedQueue) createTopic(name string, fromEtcd bool) error {
 		)
 	}
 
-	t, err := u.newTopic(name)
+	t, err := u.newTopic(name, persist)
 	if err != nil {
 		return err
 	}
@@ -318,7 +320,7 @@ func (u *UnitedQueue) createTopic(name string, fromEtcd bool) error {
 	return nil
 }
 
-func (u *UnitedQueue) create(key, rec string, fromEtcd bool) error {
+func (u *UnitedQueue) create(key, arg string, fromEtcd bool) error {
 	key = strings.TrimPrefix(key, "/")
 	key = strings.TrimSuffix(key, "/")
 
@@ -343,8 +345,8 @@ func (u *UnitedQueue) create(key, rec string, fromEtcd bool) error {
 	if len(parts) == 2 {
 		lineName = parts[1]
 		var recycle time.Duration
-		if rec != "" {
-			recycle, err = time.ParseDuration(rec)
+		if arg != "" {
+			recycle, err = time.ParseDuration(arg)
 			if err != nil {
 				return utils.NewError(
 					utils.ErrBadRequest,
@@ -369,7 +371,11 @@ func (u *UnitedQueue) create(key, rec string, fromEtcd bool) error {
 			return err
 		}
 	} else {
-		err = u.createTopic(topicName, fromEtcd)
+		var persist bool
+		if arg == "persist" {
+			persist = true
+		}
+		err = u.createTopic(topicName, persist, fromEtcd)
 		if err != nil {
 			// log.Printf("create topic[%s] error: %s", topicName, err)
 			return err
@@ -380,8 +386,8 @@ func (u *UnitedQueue) create(key, rec string, fromEtcd bool) error {
 }
 
 // Create implements Create interface
-func (u *UnitedQueue) Create(key, rec string) error {
-	return u.create(key, rec, false)
+func (u *UnitedQueue) Create(key, arg string) error {
+	return u.create(key, arg, false)
 }
 
 // Push implements Push interface

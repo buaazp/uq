@@ -18,6 +18,7 @@ func init() {
 
 type topic struct {
 	name      string
+	persist   bool
 	lines     map[string]*line
 	linesLock sync.RWMutex
 	head      uint64
@@ -33,7 +34,8 @@ type topic struct {
 }
 
 type topicStore struct {
-	Lines []string
+	Lines   []string
+	Persist bool
 }
 
 func (t *topic) getData(id uint64) ([]byte, error) {
@@ -104,6 +106,7 @@ func (t *topic) genTopicStore() *topicStore {
 
 	ts := new(topicStore)
 	ts.Lines = lines
+	ts.Persist = t.persist
 
 	return ts
 }
@@ -281,10 +284,13 @@ func (t *topic) backgroundClean() {
 				log.Printf("topic[%s] export lines error: %s", t.name, err)
 			}
 		case <-cleanTick.C:
-			bgQuit := t.clean()
-			if bgQuit {
-				// log.Printf("topic[%s] t.clean return quit: %v", t.name, bgQuit)
-				break
+			if !t.persist {
+				log.Printf("cleaning... %v", t.persist)
+				bgQuit := t.clean()
+				if bgQuit {
+					// log.Printf("topic[%s] t.clean return quit: %v", t.name, bgQuit)
+					break
+				}
 			}
 		case <-t.quit:
 			// log.Printf("topic[%s] background clean catched quit", t.name)
@@ -305,11 +311,15 @@ func (t *topic) newLine(name string, recycle time.Duration) (*line, error) {
 	imap := make(map[uint64]bool)
 	l := new(line)
 	l.name = name
-	l.head = t.head
+	if !t.persist {
+		l.head = t.head
+	} else {
+		l.head = 0
+	}
 	l.recycle = recycle
 	l.recycleKey = t.name + "/" + name + keyLineRecycle
 	l.inflight = inflight
-	l.ihead = t.head
+	l.ihead = l.head
 	l.imap = imap
 	l.t = t
 
