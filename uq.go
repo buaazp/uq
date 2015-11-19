@@ -161,7 +161,11 @@ func main() {
 	stop := make(chan os.Signal)
 	entryFailed := make(chan bool)
 	adminFailed := make(chan bool)
-	signal.Notify(stop, syscall.SIGINT, os.Interrupt, os.Kill)
+	signal.Notify(stop,
+		syscall.SIGHUP,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+		syscall.SIGQUIT)
 	var wg sync.WaitGroup
 
 	// start entrance server

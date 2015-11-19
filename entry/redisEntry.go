@@ -108,7 +108,7 @@ func (r *RedisEntry) handlerConn(ss *session) {
 			log.Printf("session read command error: %s", err)
 			break
 		}
-		log.Printf("cmd: %v", cmd)
+		// log.Printf("cmd: %v", cmd)
 		rep := r.process(ss, cmd)
 		if rep != nil {
 			err = ss.writeReply(rep)
