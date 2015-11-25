@@ -1,20 +1,14 @@
 package queue
 
 import (
-	"bytes"
 	"container/list"
 	"encoding/binary"
-	"encoding/gob"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/buaazp/uq/utils"
 )
-
-func init() {
-	gob.Register(&topicStore{})
-}
 
 type topic struct {
 	name      string
@@ -31,11 +25,6 @@ type topic struct {
 
 	quit chan bool
 	wg   sync.WaitGroup
-}
-
-type topicStore struct {
-	Lines   []string
-	Persist bool
 }
 
 func (t *topic) getData(id uint64) ([]byte, error) {
@@ -96,7 +85,7 @@ func (t *topic) removeTailData() error {
 	return nil
 }
 
-func (t *topic) genTopicStore() *topicStore {
+func (t *topic) genTopicStore() *UnitedTopicStore {
 	lines := make([]string, len(t.lines))
 	i := 0
 	for _, line := range t.lines {
@@ -104,7 +93,7 @@ func (t *topic) genTopicStore() *topicStore {
 		i++
 	}
 
-	ts := new(topicStore)
+	ts := new(UnitedTopicStore)
 	ts.Lines = lines
 	ts.Persist = t.persist
 
@@ -112,11 +101,8 @@ func (t *topic) genTopicStore() *topicStore {
 }
 
 func (t *topic) exportTopic() error {
-	topicStoreValue := t.genTopicStore()
-
-	buffer := bytes.NewBuffer(nil)
-	enc := gob.NewEncoder(buffer)
-	err := enc.Encode(topicStoreValue)
+	ts := t.genTopicStore()
+	buf, err := ts.Marshal()
 	if err != nil {
 		return utils.NewError(
 			utils.ErrInternalError,
@@ -124,7 +110,7 @@ func (t *topic) exportTopic() error {
 		)
 	}
 
-	err = t.q.setData(t.name, buffer.Bytes())
+	err = t.q.setData(t.name, buf)
 	if err != nil {
 		return err
 	}
@@ -161,8 +147,8 @@ func (t *topic) exportLines() error {
 	return nil
 }
 
-func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, error) {
-	// log.Printf("topic[%s] loading inflights: %v", t.name, lineStoreValue.Inflights)
+func (t *topic) loadLine(lineName string, ls UnitedLineStore) (*line, error) {
+	// log.Printf("topic[%s] loading inflights: %v", t.name, ls.Inflights)
 	l := new(line)
 	l.name = lineName
 	l.recycleKey = t.name + "/" + lineName + keyLineRecycle
@@ -178,16 +164,16 @@ func (t *topic) loadLine(lineName string, lineStoreValue lineStore) (*line, erro
 		)
 	}
 	l.recycle = lineRecycle
-	l.head = lineStoreValue.Head
-	l.ihead = lineStoreValue.Ihead
+	l.head = ls.Head
+	l.ihead = ls.Ihead
 	imap := make(map[uint64]bool)
 	for i := l.ihead; i < l.head; i++ {
 		imap[i] = false
 	}
 	l.imap = imap
 	inflight := list.New()
-	for index := range lineStoreValue.Inflights {
-		msg := &lineStoreValue.Inflights[index]
+	for index := range ls.Inflights {
+		msg := ls.Inflights[index]
 		inflight.PushBack(msg)
 		imap[msg.Tid] = true
 	}

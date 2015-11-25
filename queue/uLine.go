@@ -1,19 +1,13 @@
 package queue
 
 import (
-	"bytes"
 	"container/list"
-	"encoding/gob"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/buaazp/uq/utils"
 )
-
-func init() {
-	gob.Register(&lineStore{})
-}
 
 type line struct {
 	name         string
@@ -26,12 +20,6 @@ type line struct {
 	ihead        uint64
 	imap         map[uint64]bool
 	t            *topic
-}
-
-type lineStore struct {
-	Head      uint64
-	Inflights []inflightMessage
-	Ihead     uint64
 }
 
 func (l *line) exportRecycle() error {
@@ -51,17 +39,17 @@ func (l *line) removeRecycleData() error {
 	return nil
 }
 
-func (l *line) genLineStore() *lineStore {
-	inflights := make([]inflightMessage, l.inflight.Len())
+func (l *line) genLineStore() *UnitedLineStore {
+	inflights := make([]*InflightMessage, l.inflight.Len())
 	i := 0
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
-		msg := m.Value.(*inflightMessage)
-		inflights[i] = *msg
+		msg := m.Value.(*InflightMessage)
+		inflights[i] = msg
 		i++
 	}
 	// log.Printf("inflights: %v", inflights)
 
-	ls := new(lineStore)
+	ls := new(UnitedLineStore)
 	ls.Head = l.head
 	ls.Inflights = inflights
 	ls.Ihead = l.ihead
@@ -70,17 +58,17 @@ func (l *line) genLineStore() *lineStore {
 
 func (l *line) exportLine() error {
 	// log.Printf("start export line[%s]...", l.name)
-	lineStoreValue := l.genLineStore()
-
-	buffer := bytes.NewBuffer(nil)
-	enc := gob.NewEncoder(buffer)
-	err := enc.Encode(lineStoreValue)
+	ls := l.genLineStore()
+	buf, err := ls.Marshal()
 	if err != nil {
-		return err
+		return utils.NewError(
+			utils.ErrInternalError,
+			err.Error(),
+		)
 	}
 
 	lineStoreKey := l.t.name + "/" + l.name
-	err = l.t.q.setData(lineStoreKey, buffer.Bytes())
+	err = l.t.q.setData(lineStoreKey, buf)
 	if err != nil {
 		return err
 	}
@@ -125,10 +113,11 @@ func (l *line) pop() (uint64, []byte, error) {
 
 		m := l.inflight.Front()
 		if m != nil {
-			msg := m.Value.(*inflightMessage)
-			if now.After(msg.Exptime) {
+			msg := m.Value.(*InflightMessage)
+			exp := time.Unix(0, msg.Exptime)
+			if now.After(exp) {
 				// log.Printf("key[%s/%d] is expired.", l.name, msg.Tid)
-				msg.Exptime = now.Add(l.recycle)
+				msg.Exptime = now.Add(l.recycle).UnixNano()
 				data, err := l.t.getData(msg.Tid)
 				if err != nil {
 					return 0, nil, err
@@ -162,9 +151,9 @@ func (l *line) pop() (uint64, []byte, error) {
 	l.head++
 
 	if l.recycle > 0 {
-		msg := new(inflightMessage)
+		msg := new(InflightMessage)
 		msg.Tid = tid
-		msg.Exptime = now.Add(l.recycle)
+		msg.Exptime = now.Add(l.recycle).UnixNano()
 
 		l.inflight.PushBack(msg)
 		// log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
@@ -184,9 +173,10 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 	now := time.Now()
 	if l.recycle > 0 {
 		for m := l.inflight.Front(); m != nil && fc < n; m = m.Next() {
-			msg := m.Value.(*inflightMessage)
-			if now.After(msg.Exptime) {
-				msg := m.Value.(*inflightMessage)
+			msg := m.Value.(*InflightMessage)
+			exp := time.Unix(0, msg.Exptime)
+			if now.After(exp) {
+				msg := m.Value.(*InflightMessage)
 				data, err := l.t.getData(msg.Tid)
 				if err != nil {
 					return nil, nil, err
@@ -198,10 +188,10 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 				break
 			}
 		}
-		exptime := now.Add(l.recycle)
+		exptime := now.Add(l.recycle).UnixNano()
 		for i := 0; i < fc; i++ {
 			m := l.inflight.Front()
-			msg := m.Value.(*inflightMessage)
+			msg := m.Value.(*InflightMessage)
 			msg.Exptime = exptime
 			l.inflight.Remove(m)
 			l.inflight.PushBack(msg)
@@ -233,9 +223,9 @@ func (l *line) mPop(n int) ([]uint64, [][]byte, error) {
 		datas = append(datas, data)
 
 		if l.recycle > 0 {
-			msg := new(inflightMessage)
+			msg := new(InflightMessage)
 			msg.Tid = tid
-			msg.Exptime = now.Add(l.recycle)
+			msg.Exptime = now.Add(l.recycle).UnixNano()
 
 			l.inflight.PushBack(msg)
 			// log.Printf("key[%s/%s/%d] flighted.", l.t.name, l.name, l.head)
@@ -274,7 +264,7 @@ func (l *line) confirm(id uint64) error {
 	defer l.inflightLock.Unlock()
 
 	for m := l.inflight.Front(); m != nil; m = m.Next() {
-		msg := m.Value.(*inflightMessage)
+		msg := m.Value.(*InflightMessage)
 		if msg.Tid == id {
 			l.inflight.Remove(m)
 			// log.Printf("key[%s/%s/%d] comfirmed.", l.t.name, l.name, id)

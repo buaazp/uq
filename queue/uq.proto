@@ -1,0 +1,31 @@
+// PATH_GOGOPROTOBUF=$GOPATH/src/github.com/gogo/protobuf
+// protoc --proto_path=$PATH_GOGOPROTOBUF:$PATH_GOGOPROTOBUF/protobuf:. --gogo_out=. *.proto
+// import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+package queue;
+import "gogoproto/gogo.proto";
+
+option (gogoproto.marshaler_all)       = true;
+option (gogoproto.sizer_all)           = true;
+option (gogoproto.unmarshaler_all)     = true;
+option (gogoproto.goproto_getters_all) = false;
+
+message UnitedQueueStore {
+	repeated string Topics             = 1 [(gogoproto.nullable) = true];
+}
+
+message UnitedTopicStore {
+	repeated string Lines              = 1 [(gogoproto.nullable) = true];
+	required bool Persist              = 2 [(gogoproto.nullable) = false];
+}
+
+message InflightMessage {
+	required uint64 Tid                = 1 [(gogoproto.nullable) = false];
+	required int64 Exptime             = 2 [(gogoproto.nullable) = false];
+}
+
+message UnitedLineStore {
+	required uint64 Head               = 1 [(gogoproto.nullable) = false];
+	required uint64 Ihead              = 2 [(gogoproto.nullable) = false];
+	repeated InflightMessage Inflights = 3 [(gogoproto.nullable) = true];
+}

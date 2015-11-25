@@ -1,9 +1,7 @@
 package queue
 
 import (
-	"bytes"
 	"encoding/binary"
-	"encoding/gob"
 	"errors"
 	"log"
 	"strconv"
@@ -15,10 +13,6 @@ import (
 	"github.com/buaazp/uq/utils"
 	"github.com/coreos/go-etcd/etcd"
 )
-
-func init() {
-	gob.Register(&unitedQueueStore{})
-}
 
 const (
 	storageKeyWord   string        = "UnitedQueueKey"
@@ -45,10 +39,6 @@ type UnitedQueue struct {
 	etcdKey    string
 	etcdStop   chan bool
 	wg         sync.WaitGroup
-}
-
-type unitedQueueStore struct {
-	Topics []string
 }
 
 // NewUnitedQueue returns a new UnitedQueue
@@ -136,7 +126,7 @@ func (u *UnitedQueue) exportTopics() error {
 	return nil
 }
 
-func (u *UnitedQueue) genQueueStore() *unitedQueueStore {
+func (u *UnitedQueue) genQueueStore() *UnitedQueueStore {
 	topics := make([]string, len(u.topics))
 	i := 0
 	for topicName := range u.topics {
@@ -144,24 +134,23 @@ func (u *UnitedQueue) genQueueStore() *unitedQueueStore {
 		i++
 	}
 
-	qs := new(unitedQueueStore)
+	qs := new(UnitedQueueStore)
 	qs.Topics = topics
 	return qs
 }
 
 func (u *UnitedQueue) exportQueue() error {
 	// log.Printf("start export queue...")
-
-	queueStoreValue := u.genQueueStore()
-
-	buffer := bytes.NewBuffer(nil)
-	enc := gob.NewEncoder(buffer)
-	err := enc.Encode(queueStoreValue)
+	qs := u.genQueueStore()
+	buf, err := qs.Marshal()
 	if err != nil {
-		return err
+		return utils.NewError(
+			utils.ErrInternalError,
+			err.Error(),
+		)
 	}
 
-	err = u.setData(storageKeyWord, buffer.Bytes())
+	err = u.setData(storageKeyWord, buf)
 	if err != nil {
 		return err
 	}
@@ -170,10 +159,10 @@ func (u *UnitedQueue) exportQueue() error {
 	return nil
 }
 
-func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*topic, error) {
+func (u *UnitedQueue) loadTopic(topicName string, ts UnitedTopicStore) (*topic, error) {
 	t := new(topic)
 	t.name = topicName
-	t.persist = topicStoreValue.Persist
+	t.persist = ts.Persist
 	t.q = u
 	t.quit = make(chan bool)
 
@@ -191,7 +180,7 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 	t.tail = binary.LittleEndian.Uint64(topicTailData)
 
 	lines := make(map[string]*line)
-	for _, lineName := range topicStoreValue.Lines {
+	for _, lineName := range ts.Lines {
 		lineStoreKey := topicName + "/" + lineName
 		lineStoreData, err := u.getData(lineStoreKey)
 		if err != nil {
@@ -200,16 +189,17 @@ func (u *UnitedQueue) loadTopic(topicName string, topicStoreValue topicStore) (*
 		if len(lineStoreData) == 0 {
 			return nil, errors.New("line backup data missing: " + lineStoreKey)
 		}
-		var lineStoreValue lineStore
-		dec3 := gob.NewDecoder(bytes.NewBuffer(lineStoreData))
-		if e := dec3.Decode(&lineStoreValue); e == nil {
-			l, err := t.loadLine(lineName, lineStoreValue)
-			if err != nil {
-				continue
-			}
-			lines[lineName] = l
-			// log.Printf("line[%s] load succ.", lineStoreKey)
+		var ls UnitedLineStore
+		err = ls.Unmarshal(lineStoreData)
+		if err != nil {
+			return nil, err
 		}
+		l, err := t.loadLine(lineName, ls)
+		if err != nil {
+			continue
+		}
+		lines[lineName] = l
+		// log.Printf("line[%s] load succ.", lineStoreKey)
 	}
 	t.lines = lines
 
@@ -229,29 +219,31 @@ func (u *UnitedQueue) loadQueue() error {
 	}
 
 	if len(unitedQueueStoreData) > 0 {
-		var unitedQueueStoreValue unitedQueueStore
-		dec := gob.NewDecoder(bytes.NewBuffer(unitedQueueStoreData))
-		if e := dec.Decode(&unitedQueueStoreValue); e == nil {
-			for _, topicName := range unitedQueueStoreValue.Topics {
-				topicStoreData, err := u.getData(topicName)
-				if err != nil {
-					return err
-				}
-				if len(topicStoreData) == 0 {
-					return errors.New("topic backup data missing: " + topicName)
-				}
-				var topicStoreValue topicStore
-				dec2 := gob.NewDecoder(bytes.NewBuffer(topicStoreData))
-				if e := dec2.Decode(&topicStoreValue); e == nil {
-					t, err := u.loadTopic(topicName, topicStoreValue)
-					if err != nil {
-						return err
-					}
-					u.topicsLock.Lock()
-					u.topics[topicName] = t
-					u.topicsLock.Unlock()
-				}
+		var qs UnitedQueueStore
+		err := qs.Unmarshal(unitedQueueStoreData)
+		if err != nil {
+			return err
+		}
+		for _, topicName := range qs.Topics {
+			topicStoreData, err := u.getData(topicName)
+			if err != nil {
+				return err
 			}
+			if len(topicStoreData) == 0 {
+				return errors.New("topic backup data missing: " + topicName)
+			}
+			var ts UnitedTopicStore
+			err = ts.Unmarshal(topicStoreData)
+			if err != nil {
+				return err
+			}
+			t, err := u.loadTopic(topicName, ts)
+			if err != nil {
+				return err
+			}
+			u.topicsLock.Lock()
+			u.topics[topicName] = t
+			u.topicsLock.Unlock()
 		}
 	}
 
