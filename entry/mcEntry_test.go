@@ -2,6 +2,7 @@ package entry
 
 import (
 	"testing"
+	"time"
 
 	"github.com/bradfitz/gomemcache/memcache"
 	"github.com/buaazp/uq/queue"
@@ -32,6 +33,7 @@ func TestNewMcEntry(t *testing.T) {
 		go func() {
 			entrance.ListenAndServe()
 		}()
+		time.Sleep(100 * time.Millisecond)
 	})
 }
 

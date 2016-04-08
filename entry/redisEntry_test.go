@@ -29,6 +29,7 @@ func TestNewRedisEntry(t *testing.T) {
 		go func() {
 			entrance.ListenAndServe()
 		}()
+		time.Sleep(100 * time.Millisecond)
 	})
 }
 

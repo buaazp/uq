@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/buaazp/uq/queue"
 	"github.com/buaazp/uq/store"
@@ -39,6 +40,7 @@ func TestNewHTTPEntry(t *testing.T) {
 		go func() {
 			entrance.ListenAndServe()
 		}()
+		time.Sleep(100 * time.Millisecond)
 	})
 }
 
