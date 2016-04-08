@@ -1,13 +1,13 @@
 language: go
 
 go:
-  - 1.4.2
+  - 1.5.3
+  - 1.6
+  - tips
 
 before_install:
   - go get -v github.com/axw/gocov/gocov
   - go get -v github.com/mattn/goveralls
-  - if ! go get code.google.com/p/go.tools/cmd/cover; then go get golang.org/x/tools/cmd/cover; fi
-  - go get -v golang.org/x/tools/cmd/vet
   - go get -v github.com/golang/lint/golint
 
 install:
@@ -15,12 +15,12 @@ install:
   - go build -v
 
 script:
-  - go vet ./...
-  - $HOME/gopath/bin/golint ./...
   - go test -v ./admin
   - go test -v ./entry
   - go test -v ./queue
   - go test -v ./store
   - go test -v ./utils
   - go test -v .
+  - go vet ./...
+  - $HOME/gopath/bin/golint ./...
   - $HOME/gopath/bin/goveralls -service=travis-ci

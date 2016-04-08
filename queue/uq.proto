@@ -1,6 +1,5 @@
 // PATH_GOGOPROTOBUF=$GOPATH/src/github.com/gogo/protobuf
 // protoc --proto_path=$PATH_GOGOPROTOBUF:$PATH_GOGOPROTOBUF/protobuf:. --gogo_out=. *.proto
-// import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 package queue;
 import "gogoproto/gogo.proto";
